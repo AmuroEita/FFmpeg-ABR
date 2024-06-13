@@ -70,6 +70,35 @@ struct timeline {
     int64_t duration;
 };
 
+// abr
+enum SwitchType {
+    SWITCH_VIDEO,
+    SWITCH_AUDIO,
+    SWITCH_VIDEO_AUDIO,
+    SWITCH_TYPES
+};
+
+struct switch_task {
+    enum SwitchType type;
+    int64_t switch_timestamp;
+};
+
+struct switch_info {
+    int     pls_index;
+    int64_t first_timestamp;
+    int64_t delta_timestamp;
+};
+
+// abr algorithm
+struct throughput {
+    int n_throughputs;
+
+    /* throughputs are in kbps */
+    float throughput_fifo[ABR_THROUGHPUT_FIFO_LEN];
+    int head;
+    int tail;
+};
+
 /*
  * Each playlist has its own demuxer. If it is currently active,
  * it has an opened AVIOContext too, and potentially an AVPacket
@@ -158,7 +187,90 @@ typedef struct DASHContext {
     int is_init_section_common_audio;
     int is_init_section_common_subtitle;
 
+    int abr;
+    AVDictionary *abr_initial;
+    struct throughput  *throughputs;
+    struct switch_task *switch_tasks;
+    struct switch_info *switch_info;
+    int switch_inited;
+    int can_switch;
+    int switch_request;
+    int switch_step;
+    int cur_var;
 } DASHContext;
+
+// abr functions
+static struct segment *next_segment(struct representation *pls);
+static int open_input(DASHContext *c, struct representation *pls, struct segment *seg, AVIOContext **in);
+static long select_cur_seq_no(DASHContext *c, struct representation *pls);
+static AVRational get_timebase(struct representation *pls);
+
+static struct segment *next2_segment(struct representation *pls)
+{
+    int n = pls->cur_seq_no - pls->start_seq_no + 2;
+    if (n >= pls->n_segments)
+        return NULL;
+    return pls->segments[n];
+}
+
+static int representation_type_full(struct representation *pls)
+{
+    if (pls->n_main_streams == 1) {
+        return (enum SwitchType)pls->main_streams[0]->codecpar->codec_type;
+    } else {
+        return SWITCH_VIDEO_AUDIO;
+    }
+}
+
+static int playlist_type_simple(struct representation *pls)
+{
+    int type = playlist_type_full(pls);
+    if (type == SWITCH_VIDEO_AUDIO)
+        type = SWITCH_VIDEO;
+    return type;
+}
+
+static int is_pls_switch_to(DASHContext *c, int index) {
+    if (c->switch_request == -1)
+        return 0;
+    for (int i = 0; i < c->videos[c->switch_request]; i++) {
+        if (c->videos[c->switch_request]->stream_index == index)
+            return 1;
+    }
+    return 0;
+}
+
+static int update_throughputs(struct throughput *thr, float time, int pb_size)
+{
+    if (pb_size <= 0 || time <= 0)
+        return AVERROR(EINVAL);
+    if (thr->n_throughputs < ABR_THROUGHPUT_FIFO_LEN) {
+        ++thr->n_throughputs;
+    } else {
+        thr->head = (thr->head + 1) % ABR_THROUGHPUT_FIFO_LEN;
+    }
+    thr->throughput_fifo[thr->tail] = (float)(pb_size) / time;
+    thr->tail = (thr->tail + 1) % ABR_THROUGHPUT_FIFO_LEN;
+    return 0;
+}
+
+static int64_t get_switch_timestamp(DASHContext *c, struct representation *pls)
+{
+    int64_t first_timestamp, pos;
+    int type;
+    int n = pls->cur_seq_no + c->switch_step;
+    if (n >= pls->n_segments)
+        return -1;
+
+    type = playlist_type_simple(pls);
+    first_timestamp = c->switch_info[type].first_timestamp;
+    pos = first_timestamp == AV_NOPTS_VALUE ? 0 : first_timestamp;
+
+    for (int i = 0; i < n; i++) {
+        pos += pls->segments[i]->duration;
+    }
+    return pos;
+}
 
 static int ishttp(char *url)
 {
@@ -410,6 +522,9 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
     if (av_strstart(url, "crypto", NULL)) {
         if (url[6] == '+' || url[6] == ':')
             proto_name = avio_find_protocol_name(url + 7);
+    } else if (av_strstart(url, "ffabr", NULL)) {
+        if (url[5] == '+' || url[5] == ':')
+            proto_name = avio_find_protocol_name(url + 6);
     }
 
     if (!proto_name)
@@ -436,6 +551,9 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
         ;
     else if (av_strstart(url, "crypto", NULL) && !strncmp(proto_name, url + 7, strlen(proto_name)) && url[7 + strlen(proto_name)] == ':')
         ;
+    else if (av_strstart(url, "ffabr", NULL) && !strncmp(proto_name, url + 6, strlen(proto_name))
+                && (url[6 + strlen(proto_name)] == ':' || url[6 + strlen(proto_name)] == '+'))
+        ;
     else if (strcmp(proto_name, "file") || !strncmp(url, "file,", 5))
         return AVERROR_INVALIDDATA;
 
@@ -454,6 +572,75 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
             av_dict_set(opts, "cookies", new_cookies, AV_DICT_DONT_STRDUP_VAL);
         }
 
+        if (c->abr) {
+            AVDictionary *abr_ret = NULL;
+            AVDictionaryEntry *en = NULL;
+            struct segment *seg;
+            int pb_size, switch_request;
+            enum SwitchType type;
+            av_opt_get_dict_val(*pb, "abr-metadata", AV_OPT_SEARCH_CHILDREN, &abr_ret);
+
+            if (abr_ret) {
+                en = av_dict_get(abr_ret, "download_time", NULL, 0);
+                if (en) {
+                    pb_size = avio_size(*pb);
+                    update_throughputs(c->throughputs, strtol(en->value, NULL, 10) / 1000.0, pb_size);
+                    av_log(s, AV_LOG_VERBOSE, "[dash abr] time=%.2fms, size=%.2fkb\n",
+                                strtol(en->value, NULL, 10) / 1000.0, pb_size / 1000.0);
+                }
+
+                en = av_dict_get(abr_ret, "switch_request", NULL, 0);
+                if (en) {
+                switch_request = strtol(en->value, NULL, 10);
+                if (switch_request != -1)
+                    av_log(s, AV_LOG_INFO, "[abr] switch request: %s\n", en->value);
+                }
+
+                en = av_dict_get(abr_ret, "type", NULL, 0);
+                if (en) {
+                    type = strtol(en->value, NULL, 10);
+                }
+
+                if (switch_request != -1) {
+                    struct variant *var = c->variants[switch_request];
+                    c->switch_request = switch_request;
+                    c->can_switch = 0;
+                    for (int i = 0; i < var->n_playlists; i++) {
+                        struct playlist *pls = var->playlists[i];
+                        int64_t switch_timestamp;
+                        pls->cur_seq_no = select_cur_seq_no(c, pls);
+                        // if pls has same type to the segment just downloaded, switch should be delayed
+                        if (type == SWITCH_VIDEO_AUDIO || playlist_type_full(pls) == type) {
+                            pls->cur_seq_no++;
+                        }
+
+                        if (c->switch_step == 2) {
+                        seg = next2_segment(pls);
+                        } else {
+                            seg = next_segment(pls);
+                        }
+
+                        switch_timestamp = get_switch_timestamp(c,  pls);
+                        if (!seg || switch_timestamp == -1) {
+                            c->switch_request = -1;
+                            av_log(s, AV_LOG_INFO, "[abr] no more segment need to switch\n");
+                        } else {
+                            int ptype;
+                            ptype = playlist_type_simple(pls);
+                            c->switch_tasks[pls->index].type = ptype;
+                            c->switch_tasks[pls->index].switch_timestamp = switch_timestamp - c->switch_info[ptype].delta_timestamp * 1.5;
+                            av_log(s, AV_LOG_INFO, "[dash abr] pls%d, switch type: %d timestamp: %ld\n",
+                                        pls->index, c->switch_tasks[pls->index].type, c->switch_tasks[pls->index].switch_timestamp);
+                            if (c->switch_step == 2) {
+                                pls->input_next_requested = 1;
+                                ret = open_input(c, pls, seg, &pls->input_next);
+                            }
+                        }
+                    }
+                }
+            }
+            av_dict_free(&abr_ret);
+        }
     }
 
     av_dict_free(&tmp);
@@ -1682,6 +1869,38 @@ static int read_from_url(struct representation *pls, struct fragment *seg,
     return ret;
 }
 
+static int abrinfo_to_dict(DASHContext *c, enum SwitchType type, char **abr_info)
+{
+    struct throughput *thr = c->throughputs;
+    char buffer[MAX_URL_SIZE];
+    int size, i, j;
+    size = snprintf(buffer, sizeof(buffer), "format=dash:");
+    size += snprintf(buffer + size, sizeof(buffer) - size, "cur_var=%d:", c->cur_var);
+    size += snprintf(buffer + size, sizeof(buffer) - size, "type=%d:", type);
+    size += snprintf(buffer + size, sizeof(buffer) - size, "can_switch=%d:", c->can_switch);
+    size += snprintf(buffer + size, sizeof(buffer) - size, "n_variants=%d:", c->n_variants);
+    for (i = 0; i < c->n_variants; i++) {
+        struct variant *v = c->variants[i];
+        size += snprintf(buffer + size, sizeof(buffer) - size, "variant_bitrate%d=%d:", i, v->bandwidth);
+    }
+    size += snprintf(buffer + size, sizeof(buffer) - size, "n_throughputs=%d:", thr->n_throughputs);
+    if (thr->n_throughputs > 0) {
+        i = thr->head;
+        j = 0;
+        do {
+            size += snprintf(buffer + size, sizeof(buffer) - size, "throughputs%d=%.2f:", j, thr->throughput_fifo[i]);
+            j++;
+            i = (i + 1) % ABR_THROUGHPUT_FIFO_LEN;
+        } while (i != thr->tail);
+    }
+    *abr_info = av_malloc(size);
+    if (!abr_info)
+        return AVERROR(ENOMEM);
+    snprintf(*abr_info, size, "%s", buffer);
+    av_log(c, AV_LOG_VERBOSE, "[dash abr] abr_info: %s\n", *abr_info);
+    return 0;
+}
+
 static int open_input(DASHContext *c, struct representation *pls, struct fragment *seg)
 {
     AVDictionary *opts = NULL;
@@ -1704,6 +1923,16 @@ static int open_input(DASHContext *c, struct representation *pls, struct fragmen
     ff_make_absolute_url(url, c->max_url_size, c->base_url, seg->url);
     av_log(pls->parent, AV_LOG_VERBOSE, "DASH request for url '%s', offset %"PRId64"\n",
            url, seg->url_offset);
+
+    if (c->abr) {
+        char *abr_opts;
+        abrinfo_to_dict(c, playlist_type_full(pls), &abr_opts);
+        av_dict_set(&opts, "abr-params", abr_opts, 0);
+        av_free(abr_opts);
+
+        snprintf(url, sizeof(url), "ffabr:%s", seg->url);
+    }
+
     ret = open_url(pls->parent, &pls->input, url, &c->avio_opts, opts, NULL);
 
 cleanup:
@@ -1823,10 +2052,21 @@ restart:
     if (ret > 0)
         goto end;
 
-    if (c->is_live || v->cur_seq_no < v->last_seq_no) {
+    if (c->is_live || v->cur_seq_no < v->last_seq_no && c->abr) {
         if (!v->is_restart_needed)
             v->cur_seq_no++;
         v->is_restart_needed = 1;
+    }
+
+    if (c->abr) {
+        if (c->switch_request == -1)
+            ;
+        else if (v->needed && !is_pls_switch_to(c, v->index) && !v->input_next_requested) {
+            av_log(v->parent, AV_LOG_VERBOSE, "read_data: needed but not download playlist %d ('%s')\n",
+                    v->index, v->url);
+            ret = AVERROR_EOF;
+            goto end;
+        }
     }
 
 end:
@@ -2055,6 +2295,19 @@ static int dash_read_header(AVFormatContext *s)
     int stream_index = 0;
     int i;
 
+    c->cur_var = -1;
+    c->switch_request = -1;
+    c->switch_step = 1;
+    c->can_switch = -1;
+
+    if (c->abr) {
+        c->http_persistent = 0;
+        c->throughputs = av_mallocz(sizeof(struct throughput));
+        if (!c->throughputs) {
+            return AVERROR(ENOMEM);
+        }
+    }
+
     c->interrupt_callback = &s->interrupt_callback;
 
     if ((ret = save_avio_options(s)) < 0)
@@ -2142,6 +2395,7 @@ static int dash_read_header(AVFormatContext *s)
             av_dict_set_int(&rep->assoc_stream->metadata, "variant_bitrate", rep->bandwidth, 0);
         move_metadata(rep->assoc_stream, "id", &rep->id);
     }
+
     for (i = 0; i < c->n_audios; i++) {
         rep = c->audios[i];
         av_program_add_stream_index(s, 0, rep->stream_index);
@@ -2151,6 +2405,7 @@ static int dash_read_header(AVFormatContext *s)
         move_metadata(rep->assoc_stream, "id", &rep->id);
         move_metadata(rep->assoc_stream, "language", &rep->lang);
     }
+
     for (i = 0; i < c->n_subtitles; i++) {
         rep = c->subtitles[i];
         av_program_add_stream_index(s, 0, rep->stream_index);
@@ -2256,6 +2511,13 @@ static int dash_close(AVFormatContext *s)
     free_audio_list(c);
     free_video_list(c);
     free_subtitle_list(c);
+
+    if (c->abr) {
+        av_free(c->throughputs);
+        av_free(c->switch_tasks);
+        av_free(c->switch_info);
+    }
+
     av_dict_free(&c->avio_opts);
     av_freep(&c->base_url);
     return 0;

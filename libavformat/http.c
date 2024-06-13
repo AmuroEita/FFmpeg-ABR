@@ -1871,7 +1871,7 @@ const URLProtocol ff_http_protocol = {
     .priv_data_size      = sizeof(HTTPContext),
     .priv_data_class     = &http_context_class,
     .flags               = URL_PROTOCOL_FLAG_NETWORK,
-    .default_whitelist   = "http,https,tls,rtp,tcp,udp,crypto,httpproxy,data"
+    .default_whitelist   = "http,https,tls,rtp,tcp,udp,crypto,httpproxy,data,ffabr"
 };
 #endif /* CONFIG_HTTP_PROTOCOL */
 
@@ -1891,7 +1891,7 @@ const URLProtocol ff_https_protocol = {
     .priv_data_size      = sizeof(HTTPContext),
     .priv_data_class     = &https_context_class,
     .flags               = URL_PROTOCOL_FLAG_NETWORK,
-    .default_whitelist   = "http,https,tls,rtp,tcp,udp,crypto,httpproxy"
+    .default_whitelist   = "http,https,tls,rtp,tcp,udp,crypto,httpproxy,ffabr"
 };
 #endif /* CONFIG_HTTPS_PROTOCOL */
 
