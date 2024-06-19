@@ -33,6 +33,8 @@
 #define MAX_BPRINT_READ_SIZE (UINT_MAX - 1)
 #define DEFAULT_MANIFEST_SIZE 8 * 1024
 
+#define ABR_THROUGHPUT_FIFO_LEN 20
+
 struct fragment {
     int64_t url_offset;
     int64_t size;
@@ -207,30 +209,30 @@ static AVRational get_timebase(struct representation *pls);
 
 static struct segment *next2_segment(struct representation *pls)
 {
-    int n = pls->cur_seq_no - pls->start_seq_no + 2;
-    if (n >= pls->n_segments)
+    int n = pls->cur_seq_no - pls->first_seq_no + 2;
+    if (n >= pls->n_fragments)
         return NULL;
-    return pls->segments[n];
+    return pls->fragments[n];
 }
 
 static int representation_type_full(struct representation *pls)
 {
-    if (pls->n_main_streams == 1) {
-        return (enum SwitchType)pls->main_streams[0]->codecpar->codec_type;
+    if (pls->stream_index == 1) {
+        return (enum SwitchType)pls->assoc_stream[0].codecpar->codec_type;
     } else {
         return SWITCH_VIDEO_AUDIO;
     }
 }
 
-static int playlist_type_simple(struct representation *pls)
+static int representation_type_simple(struct representation *pls)
 {
-    int type = playlist_type_full(pls);
+    int type = representation_type_full(pls);
     if (type == SWITCH_VIDEO_AUDIO)
         type = SWITCH_VIDEO;
     return type;
 }
 
-static int is_pls_switch_to(DASHContext *c, int index) {
+static int is_rep_switch_to(DASHContext *c, int index) {
     if (c->switch_request == -1)
         return 0;
     for (int i = 0; i < c->videos[c->switch_request]; i++) {
@@ -259,7 +261,7 @@ static int64_t get_switch_timestamp(DASHContext *c, struct representation *pls)
     int64_t first_timestamp, pos;
     int type;
     int n = pls->cur_seq_no + c->switch_step;
-    if (n >= pls->n_segments)
+    if (n >= pls->n_fragments)
         return -1;
 
     type = playlist_type_simple(pls);
@@ -602,15 +604,15 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
                 }
 
                 if (switch_request != -1) {
-                    struct variant *var = c->variants[switch_request];
-                    c->switch_request = switch_request;
+                    // struct variant *var = c->variants[switch_request];
+                    // c->switch_request = switch_request;
                     c->can_switch = 0;
-                    for (int i = 0; i < var->n_playlists; i++) {
-                        struct playlist *pls = var->playlists[i];
+                    for (int i = 0; i < c->n_videos i++) {
+                        struct representation *pls = c->videos[i];
                         int64_t switch_timestamp;
                         pls->cur_seq_no = select_cur_seq_no(c, pls);
                         // if pls has same type to the segment just downloaded, switch should be delayed
-                        if (type == SWITCH_VIDEO_AUDIO || playlist_type_full(pls) == type) {
+                        if (type == SWITCH_VIDEO_AUDIO || representation_type_full(pls) == type) {
                             pls->cur_seq_no++;
                         }
 
@@ -626,11 +628,11 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
                             av_log(s, AV_LOG_INFO, "[abr] no more segment need to switch\n");
                         } else {
                             int ptype;
-                            ptype = playlist_type_simple(pls);
-                            c->switch_tasks[pls->index].type = ptype;
-                            c->switch_tasks[pls->index].switch_timestamp = switch_timestamp - c->switch_info[ptype].delta_timestamp * 1.5;
+                            ptype = representation_type_simple(pls);
+                            c->switch_tasks[pls->stream_index].type = ptype;
+                            c->switch_tasks[pls->stream_index].switch_timestamp = switch_timestamp - c->switch_info[ptype].delta_timestamp * 1.5;
                             av_log(s, AV_LOG_INFO, "[dash abr] pls%d, switch type: %d timestamp: %ld\n",
-                                        pls->index, c->switch_tasks[pls->index].type, c->switch_tasks[pls->index].switch_timestamp);
+                                        pls->index, c->switch_tasks[pls->stream_index].type, c->switch_tasks[pls->stream_index].switch_timestamp);
                             if (c->switch_step == 2) {
                                 pls->input_next_requested = 1;
                                 ret = open_input(c, pls, seg, &pls->input_next);
