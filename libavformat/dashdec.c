@@ -71,20 +71,12 @@ struct timeline {
 };
 
 // abr
-enum SwitchType {
-    SWITCH_VIDEO,
-    SWITCH_AUDIO,
-    SWITCH_VIDEO_AUDIO,
-    SWITCH_TYPES
-};
-
 struct switch_task {
-    enum SwitchType type;
     int64_t switch_timestamp;
 };
 
 struct switch_info {
-    int     pls_index;
+    int     rep_index;
     int64_t first_timestamp;
     int64_t delta_timestamp;
 };
@@ -200,37 +192,19 @@ typedef struct DASHContext {
 } DASHContext;
 
 // abr functions
-static struct segment *next_segment(struct representation *pls);
-static int open_input(DASHContext *c, struct representation *pls, struct segment *seg, AVIOContext **in);
-static long select_cur_seq_no(DASHContext *c, struct representation *pls);
-static AVRational get_timebase(struct representation *pls);
+static struct segment *next_segment(struct representation *rep);
+static long select_cur_seq_no(DASHContext *c, struct representation *rep);
+static AVRational get_timebase(struct representation *rep);
 
-static struct segment *next2_segment(struct representation *pls)
+static struct segment *next2_segment(struct representation *rep)
 {
-    int n = pls->cur_seq_no - pls->start_seq_no + 2;
-    if (n >= pls->n_segments)
+    int n =  rep->cur_seq_no - rep->start_seq_no + 2;
+    if (n >= rep->n_fragments)
         return NULL;
-    return pls->segments[n];
+    return rep->fragments[n];
 }
 
-static int representation_type_full(struct representation *pls)
-{
-    if (pls->n_main_streams == 1) {
-        return (enum SwitchType)pls->main_streams[0]->codecpar->codec_type;
-    } else {
-        return SWITCH_VIDEO_AUDIO;
-    }
-}
-
-static int playlist_type_simple(struct representation *pls)
-{
-    int type = playlist_type_full(pls);
-    if (type == SWITCH_VIDEO_AUDIO)
-        type = SWITCH_VIDEO;
-    return type;
-}
-
-static int is_pls_switch_to(DASHContext *c, int index) {
+static int is_rep_switch_to(DASHContext *c, int index) {
     if (c->switch_request == -1)
         return 0;
     for (int i = 0; i < c->videos[c->switch_request]; i++) {
@@ -254,20 +228,19 @@ static int update_throughputs(struct throughput *thr, float time, int pb_size)
     return 0;
 }
 
-static int64_t get_switch_timestamp(DASHContext *c, struct representation *pls)
+static int64_t get_switch_timestamp(DASHContext *c, struct representation *rep)
 {
     int64_t first_timestamp, pos;
     int type;
-    int n = pls->cur_seq_no + c->switch_step;
-    if (n >= pls->n_segments)
+    int n = rep->cur_seq_no + c->switch_step;
+    if (n >= rep->n_fragments)
         return -1;
 
-    type = playlist_type_simple(pls);
     first_timestamp = c->switch_info[type].first_timestamp;
     pos = first_timestamp == AV_NOPTS_VALUE ? 0 : first_timestamp;
 
     for (int i = 0; i < n; i++) {
-        pos += pls->segments[i]->duration;
+        pos += rep->fragments[i]->fragment_duration;
     }
     return pos;
 }

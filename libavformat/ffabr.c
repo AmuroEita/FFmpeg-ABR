@@ -9,6 +9,11 @@
 
 #define ABR_NOT_SWITCH -1
 
+enum ABRFormatType {
+    ABR_TYPE_HLS,
+    ABR_TYPE_DASH
+};
+
 typedef struct Variant {
     uint32_t bitrate;
     size_t index;
@@ -25,10 +30,12 @@ typedef struct ABRContext {
     int8_t can_switch;
     size_t n_variants;
     variant *variants;
+
     size_t n_throughputs;
     float *throughputs;
 } ABRContext;
 
+// Get the average 
 static float harmonic_mean(const float *arr, size_t num)
 {
     float tmp = 0;
@@ -99,7 +106,7 @@ static int dash_param_parse(ABRContext *c, const AVDictionaryEntry *entry)
 static int abr_param_parse(ABRContext *c, enum ABRFormatType type, const AVDictionaryEntry *en)
 {
     int ret;
-    if (type == ABR_TYPE_HLS) {
+    if (type == ABR_TYPE_DASH) {
         ret = dash_param_parse(c, en);
     }
     return ret;
@@ -110,14 +117,16 @@ static int compare_vb(const void *a, const void *b)
     return FFDIFFSIGN((*(const variant *)b).bitrate, (*(const variant *)a).bitrate);
 }
 
-static int abr_rule(URLContext *h, float bw_estimate)
+static int abr_throughput_rule(URLContext *h, float bw_estimate)
 {
     int ret = ABR_NOT_SWITCH;
     ABRContext *c = h->priv_data;
 
+    // 0.8 - 1.2 
     if (bw_estimate < c->variants[c->cur_var].bitrate / 1000 * 1.2f &&
         bw_estimate > c->variants[c->cur_var].bitrate / 1000 * 0.8f)
         return ABR_NOT_SWITCH;
+
     qsort(c->variants, c->n_variants, sizeof(variant), compare_vb);
     for (int i = 0; i < c->n_variants; i++) {
         if (bw_estimate > c->variants[i].bitrate / 1000) {
@@ -144,12 +153,12 @@ static int abr_open(URLContext *h, const char *uri, int flags, AVDictionary **op
     ABRContext *c = h->priv_data;
     AVDictionaryEntry *en = NULL;
 
-    if (!av_strstart(uri, "ffabr+", &nested_url) &&
-        !av_strstart(uri, "ffabr:", &nested_url)) {
+    if (!av_strstart(uri, "ffabr:", &nested_url)) {
         av_log(h, AV_LOG_ERROR, "Unsupported url %s\n", uri);
         return AVERROR(EINVAL);
     }
 
+    // DASH/HLS supported
     en = av_dict_get(c->abr_params, "format", en, AV_DICT_IGNORE_SUFFIX);
     if (en) {
         if (!av_strcasecmp(en->value, "hls")) {
@@ -179,7 +188,7 @@ static int abr_open(URLContext *h, const char *uri, int flags, AVDictionary **op
     bw_estimation = harmonic_mean(c->throughputs, c->n_throughputs);
 
     if (c->can_switch == 1)
-        switch_request = abr_rule(h, bw_estimation);
+        switch_request = abr_throughput_rule(h, bw_estimation);
 
     av_dict_set_int(&c->abr_metadata, "download_time", (end - start), 0);
     av_dict_set_int(&c->abr_metadata, "switch_request", switch_request, 0);
