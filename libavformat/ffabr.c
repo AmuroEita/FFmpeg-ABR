@@ -9,6 +9,8 @@
 
 #define ABR_NOT_SWITCH -1
 
+#define ABR_THROUGHPUT_FIFO_LEN 20
+
 enum ABRFormatType {
     ABR_TYPE_HLS,
     ABR_TYPE_DASH
