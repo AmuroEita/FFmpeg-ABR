@@ -117,6 +117,7 @@ static int compare_vb(const void *a, const void *b)
     return FFDIFFSIGN((*(const variant *)b).bitrate, (*(const variant *)a).bitrate);
 }
 
+// ABR rule 1 : throughput
 static int abr_throughput_rule(URLContext *h, float bw_estimate)
 {
     int ret = ABR_NOT_SWITCH;
@@ -140,6 +141,13 @@ static int abr_throughput_rule(URLContext *h, float bw_estimate)
         ret = ABR_NOT_SWITCH;
 
     av_log(h, AV_LOG_VERBOSE, "[switch] bwe=%.2fkbps, cur=%d, switch=%d\n", bw_estimate, c->cur_var, ret);
+    return ret;
+}
+
+// ABR rule 2 
+static int abr_custom_rule(URLContext *h) 
+{
+    int ret = ABR_NOT_SWITCH;
     return ret;
 }
 
