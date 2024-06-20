@@ -214,6 +214,16 @@ static int is_rep_switch_to(DASHContext *c, int index) {
     return 0;
 }
 
+/**
+ * Update the throughput statistics for adaptive bitrate streaming.
+ *
+ * @param c The DASH context.
+ * @param pls The representation for which the throughput statistics are being updated.
+ * @param download_time The time taken to download the segment in milliseconds.
+ * @param size The size of the downloaded segment in bytes.
+ *
+ * @return 0 if the throughput statistics are successfully updated, otherwise an error code.
+ */
 static int update_throughputs(struct throughput *thr, float time, int pb_size)
 {
     if (pb_size <= 0 || time <= 0)
@@ -588,7 +598,7 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
                         }
 
                         if (c->switch_step == 2) {
-                        seg = next2_segment(pls);
+                            seg = next2_segment(pls);
                         } else {
                             seg = next_segment(pls);
                         }
