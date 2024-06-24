@@ -195,7 +195,7 @@ typedef struct DASHContext {
 } DASHContext;
 
 // abr functions
-static struct segment *next_segment(struct representation *pls) 
+static struct fragment *next_fragment(struct representation *pls) 
 {
     int n = pls->cur_seq_no - pls->first_seq_no + 1;
     if (n >= pls->n_fragments)
@@ -205,14 +205,6 @@ static struct segment *next_segment(struct representation *pls)
 static AVRational get_timebase(struct representation *pls)
 {
     return pls->ctx->streams[pls->pkt->stream_index]->time_base;
-}
-
-static struct segment *next2_fragments(struct representation *rep)
-{
-    int n = pls->cur_seq_no - pls->first_seq_no + 2;
-    if (n >= pls->n_fragments)
-        return NULL;
-    return pls->fragments[n];
 }
 
 static int representation_type_full(struct representation *pls)
@@ -627,11 +619,7 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
                             pls->cur_seq_no++;
                         }
 
-                        if (c->switch_step == 2) {
-                            seg = next2_segment(pls);
-                        } else {
-                            seg = next_segment(pls);
-                        }
+                        seg = next_fragment(pls);
 
                         switch_timestamp = get_switch_timestamp(c,  pls);
                         if (!seg || switch_timestamp == -1) {
