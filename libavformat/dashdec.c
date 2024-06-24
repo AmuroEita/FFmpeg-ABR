@@ -41,6 +41,13 @@ struct fragment {
     char *url;
 };
 
+enum SwitchType {
+    SWITCH_VIDEO,
+    SWITCH_AUDIO,
+    SWITCH_VIDEO_AUDIO,
+    SWITCH_TYPES
+};
+
 /*
  * reference to : ISO_IEC_23009-1-DASH-2012
  * Section: 5.3.9.6.2
@@ -194,6 +201,8 @@ typedef struct DASHContext {
     int cur_var;
 } DASHContext;
 
+static int64_t calc_cur_seg_no(AVFormatContext *s, struct representation *pls);
+
 // abr functions
 static struct fragment *next_fragment(struct representation *pls) 
 {
@@ -202,9 +211,10 @@ static struct fragment *next_fragment(struct representation *pls)
         return NULL;
     return pls->fragments[n];
 }
+
 static AVRational get_timebase(struct representation *pls)
 {
-    return pls->ctx->streams[pls->pkt->stream_index]->time_base;
+    return pls->ctx->assoc_streams[pls->stream_index]->time_base;
 }
 
 static int representation_type_full(struct representation *pls)
