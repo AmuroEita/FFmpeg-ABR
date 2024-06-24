@@ -81,11 +81,12 @@ struct timeline {
 
 // abr
 struct switch_task {
+    enum SwitchType type;
     int64_t switch_timestamp;
 };
 
 struct switch_info {
-    int     rep_index;
+    int     pls_index;
     int64_t first_timestamp;
     int64_t delta_timestamp;
 };
@@ -202,6 +203,7 @@ typedef struct DASHContext {
 } DASHContext;
 
 static int64_t calc_cur_seg_no(AVFormatContext *s, struct representation *pls);
+static int open_input(DASHContext *c, struct representation *pls, struct fragment *seg);
 
 // abr functions
 static struct fragment *next_fragment(struct representation *pls) 
@@ -212,9 +214,17 @@ static struct fragment *next_fragment(struct representation *pls)
     return pls->fragments[n];
 }
 
+static struct fragment *next2_fragment(struct representation *pls) 
+{
+    int n = pls->cur_seq_no - pls->first_seq_no + 2;
+    if (n >= pls->n_fragments)
+        return NULL;
+    return pls->fragments[n];
+}
+
 static AVRational get_timebase(struct representation *pls)
 {
-    return pls->ctx->assoc_streams[pls->stream_index]->time_base;
+    return pls->ctx->streams[pls->stream_index]->time_base;
 }
 
 static int representation_type_full(struct representation *pls)
@@ -280,7 +290,7 @@ static int64_t get_switch_timestamp(DASHContext *c, struct representation *pls)
     pos = first_timestamp == AV_NOPTS_VALUE ? 0 : first_timestamp;
 
     for (int i = 0; i < n; i++) {
-        pos += rep->fragments[i]->fragment_duration;
+        pos += pls->fragments[i]->fragment_duration;
     }
     return pos;
 }
@@ -588,7 +598,7 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
         if (c->abr) {
             AVDictionary *abr_ret = NULL;
             AVDictionaryEntry *en = NULL;
-            struct segment *seg;
+            struct fragment *seg;
             int pb_size, switch_request;
             enum SwitchType type;
             av_opt_get_dict_val(*pb, "abr-metadata", AV_OPT_SEARCH_CHILDREN, &abr_ret);
@@ -620,7 +630,7 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
                     // struct variant *var = c->variants[switch_request];
                     // c->switch_request = switch_request;
                     c->can_switch = 0;
-                    for (int i = 0; i < c->n_videos i++) {
+                    for (int i = 0; i < c->n_videos; i++) {
                         struct representation *pls = c->videos[i];
                         int64_t switch_timestamp;
                         pls->cur_seq_no = calc_cur_seg_no(s, pls);
@@ -629,7 +639,11 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
                             pls->cur_seq_no++;
                         }
 
-                        seg = next_fragment(pls);
+                        if (c->switch_step == 2) {
+                            seg = next2_fragment(pls);
+                        } else {
+                            seg = next_fragment(pls);
+                        }
 
                         switch_timestamp = get_switch_timestamp(c,  pls);
                         if (!seg || switch_timestamp == -1) {
@@ -643,7 +657,6 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
                             av_log(s, AV_LOG_INFO, "[dash abr] switch type: %d timestamp: %ld\n",
                                     c->switch_tasks[pls->stream_index].type, c->switch_tasks[pls->stream_index].switch_timestamp);
                             if (c->switch_step == 2) {
-                                pls->input_next_requested = 1;
                                 ret = open_input(c, pls, seg);
                             }
                         }
@@ -1889,11 +1902,11 @@ static int abrinfo_to_dict(DASHContext *c, enum SwitchType type, char **abr_info
     size += snprintf(buffer + size, sizeof(buffer) - size, "cur_var=%d:", c->cur_var);
     size += snprintf(buffer + size, sizeof(buffer) - size, "type=%d:", type);
     size += snprintf(buffer + size, sizeof(buffer) - size, "can_switch=%d:", c->can_switch);
-    size += snprintf(buffer + size, sizeof(buffer) - size, "n_variants=%d:", c->n_variants);
-    // for (i = 0; i < c->n_variants; i++) {
-    //     struct variant *v = c->variants[i];
-    //     size += snprintf(buffer + size, sizeof(buffer) - size, "variant_bitrate%d=%d:", i, v->bandwidth);
-    // }
+    // size += snprintf(buffer + size, sizeof(buffer) - size, "n_variants=%d:", c->n_variants);
+    for (i = 0; i < c->n_videos; i++) {
+        struct representation *v = c->videos[i];
+        size += snprintf(buffer + size, sizeof(buffer) - size, "variant_bitrate%d=%d:", i, v->bandwidth);
+    }
     size += snprintf(buffer + size, sizeof(buffer) - size, "n_throughputs=%d:", thr->n_throughputs);
     if (thr->n_throughputs > 0) {
         i = thr->head;
@@ -2301,7 +2314,6 @@ static int dash_read_header(AVFormatContext *s)
     c->can_switch = -1;
 
     if (c->abr) {
-        c->http_persistent = 0;
         c->throughputs = av_mallocz(sizeof(struct throughput));
         if (!c->throughputs) {
             return AVERROR(ENOMEM);
@@ -2434,8 +2446,9 @@ static int dash_read_header(AVFormatContext *s)
             int type;
 
             int64_t start = 0;
-            for (int i = 0; i < c->cur_seq_no + 1; i++) {
-                start += pls->fragments[i]->duration;
+            int64_t cur_seg_no = calc_cur_seg_no(s, pls);
+            for (int i = 0; i < cur_seq_no + 1; i++) {
+                start += pls->fragment_duration;
             }
             start = av_rescale_q(start,
                                     AV_TIME_BASE_Q,
