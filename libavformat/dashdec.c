@@ -186,6 +186,7 @@ typedef struct DASHContext {
     struct throughput  *throughputs;
     struct switch_task *switch_tasks;
     struct switch_info *switch_info;
+
     int switch_inited;
     int can_switch;
     int switch_request;
@@ -203,12 +204,8 @@ static struct segment *next_segment(struct representation *pls)
 }
 static AVRational get_timebase(struct representation *pls)
 {
-    if (pls->is_id3_timestamped)
-        return MPEG_TIME_BASE_Q;
-
     return pls->ctx->streams[pls->pkt->stream_index]->time_base;
 }
-
 
 static struct segment *next2_fragments(struct representation *rep)
 {
@@ -645,11 +642,11 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
                             ptype = representation_type_simple(pls);
                             c->switch_tasks[pls->stream_index].type = ptype;
                             c->switch_tasks[pls->stream_index].switch_timestamp = switch_timestamp - c->switch_info[ptype].delta_timestamp * 1.5;
-                            av_log(s, AV_LOG_INFO, "[dash abr] pls%d, switch type: %d timestamp: %ld\n",
-                                        pls->index, c->switch_tasks[pls->stream_index].type, c->switch_tasks[pls->stream_index].switch_timestamp);
+                            av_log(s, AV_LOG_INFO, "[dash abr] switch type: %d timestamp: %ld\n",
+                                    c->switch_tasks[pls->stream_index].type, c->switch_tasks[pls->stream_index].switch_timestamp);
                             if (c->switch_step == 2) {
                                 pls->input_next_requested = 1;
-                                ret = open_input(c, pls, seg, &pls->input_next);
+                                ret = open_input(c, pls, seg);
                             }
                         }
                     }
@@ -1895,10 +1892,10 @@ static int abrinfo_to_dict(DASHContext *c, enum SwitchType type, char **abr_info
     size += snprintf(buffer + size, sizeof(buffer) - size, "type=%d:", type);
     size += snprintf(buffer + size, sizeof(buffer) - size, "can_switch=%d:", c->can_switch);
     size += snprintf(buffer + size, sizeof(buffer) - size, "n_variants=%d:", c->n_variants);
-    for (i = 0; i < c->n_variants; i++) {
-        struct variant *v = c->variants[i];
-        size += snprintf(buffer + size, sizeof(buffer) - size, "variant_bitrate%d=%d:", i, v->bandwidth);
-    }
+    // for (i = 0; i < c->n_variants; i++) {
+    //     struct variant *v = c->variants[i];
+    //     size += snprintf(buffer + size, sizeof(buffer) - size, "variant_bitrate%d=%d:", i, v->bandwidth);
+    // }
     size += snprintf(buffer + size, sizeof(buffer) - size, "n_throughputs=%d:", thr->n_throughputs);
     if (thr->n_throughputs > 0) {
         i = thr->head;
@@ -1942,7 +1939,7 @@ static int open_input(DASHContext *c, struct representation *pls, struct fragmen
 
     if (c->abr) {
         char *abr_opts;
-        abrinfo_to_dict(c, playlist_type_full(pls), &abr_opts);
+        abrinfo_to_dict(c, representation_type_full(pls), &abr_opts);
         av_dict_set(&opts, "abr-params", abr_opts, 0);
         av_free(abr_opts);
 
@@ -2072,17 +2069,6 @@ restart:
         if (!v->is_restart_needed)
             v->cur_seq_no++;
         v->is_restart_needed = 1;
-    }
-
-    if (c->abr) {
-        if (c->switch_request == -1)
-            ;
-        else if (v->needed && !is_pls_switch_to(c, v->index) && !v->input_next_requested) {
-            av_log(v->parent, AV_LOG_VERBOSE, "read_data: needed but not download playlist %d ('%s')\n",
-                    v->index, v->url);
-            ret = AVERROR_EOF;
-            goto end;
-        }
     }
 
 end:
@@ -2428,6 +2414,48 @@ static int dash_read_header(AVFormatContext *s)
         rep->assoc_stream = s->streams[rep->stream_index];
         move_metadata(rep->assoc_stream, "id", &rep->id);
         move_metadata(rep->assoc_stream, "language", &rep->lang);
+    }
+
+    if (c->abr) {
+        int64_t abr_init_duration = AV_NOPTS_VALUE;
+        c->switch_tasks = av_malloc(c->n_videos * sizeof(struct switch_task));
+        if (!c->switch_tasks) {
+            return AVERROR(ENOMEM);
+        }
+        c->switch_info = av_malloc((SWITCH_TYPES - 1) * sizeof(struct switch_info));
+        if (!c->switch_info) {
+            return AVERROR(ENOMEM);
+        }
+        for (i = 0; i < SWITCH_TYPES - 1; i++) {
+            c->switch_info[i].pls_index = -1;
+            c->switch_info[i].first_timestamp = AV_NOPTS_VALUE;
+            c->switch_info[i].delta_timestamp = AV_NOPTS_VALUE;
+        }
+        for (i = 0; i < c->n_videos; i++) {
+            struct representation *pls = c->videos[i];
+            int type;
+
+            int64_t start = 0;
+            for (int i = 0; i < c->cur_seq_no + 1; i++) {
+                start += pls->fragments[i]->duration;
+            }
+            start = av_rescale_q(start,
+                                    AV_TIME_BASE_Q,
+                                    get_timebase(pls));
+            if (abr_init_duration == AV_NOPTS_VALUE || abr_init_duration > start)
+                abr_init_duration = start;
+
+            c->switch_tasks[i].switch_timestamp = AV_NOPTS_VALUE;
+            type = representation_type_simple(pls);
+            if (type == SWITCH_AUDIO) {
+                if (c->switch_info[SWITCH_AUDIO].pls_index == -1)
+                    c->switch_info[SWITCH_AUDIO].pls_index = pls->index;
+            } else {
+                if (c->switch_info[SWITCH_VIDEO].pls_index == -1)
+                    c->switch_info[SWITCH_VIDEO].pls_index = pls->index;
+            }
+        }
+        av_dict_set_int(&c->abr_initial, "abr_init_duration", abr_init_duration, 0);
     }
 
     return 0;
