@@ -194,20 +194,24 @@ typedef struct DASHContext {
 } DASHContext;
 
 // abr functions
-static struct segment *next_segment(struct representation *rep);
-static long select_cur_seq_no(DASHContext *c, struct representation *rep);
-static AVRational get_timebase(struct representation *rep);
-
-static struct segment *next2_segment(struct representation *rep)
+static struct segment *next_segment(struct representation *pls) 
 {
-<<<<<<< HEAD
-    int n =  rep->cur_seq_no - rep->start_seq_no + 2;
-    if (n >= rep->n_fragments)
+    int n = pls->cur_seq_no - pls->first_seq_no + 1;
+    if (n >= pls->n_fragments)
         return NULL;
-    return rep->fragments[n];
+    return pls->fragments[n];
+}
+static AVRational get_timebase(struct representation *pls)
+{
+    if (pls->is_id3_timestamped)
+        return MPEG_TIME_BASE_Q;
+
+    return pls->ctx->streams[pls->pkt->stream_index]->time_base;
 }
 
-=======
+
+static struct segment *next2_fragments(struct representation *rep)
+{
     int n = pls->cur_seq_no - pls->first_seq_no + 2;
     if (n >= pls->n_fragments)
         return NULL;
@@ -231,7 +235,6 @@ static int representation_type_simple(struct representation *pls)
     return type;
 }
 
->>>>>>> 9aa93c08720bbc48d0511579a18d0e86504565f3
 static int is_rep_switch_to(DASHContext *c, int index) {
     if (c->switch_request == -1)
         return 0;
@@ -602,24 +605,26 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
 
                 en = av_dict_get(abr_ret, "switch_request", NULL, 0);
                 if (en) {
-                switch_request = strtol(en->value, NULL, 10);
-                if (switch_request != -1)
-                    av_log(s, AV_LOG_INFO, "[abr] switch request: %s\n", en->value);
-                }
+                    switch_request = strtol(en->value, NULL, 10);
+                    if (switch_request != -1)
+                        av_log(s, AV_LOG_INFO, "[abr] switch request: %s\n", en->value);
+                    }
 
                 en = av_dict_get(abr_ret, "type", NULL, 0);
                 if (en) {
                     type = strtol(en->value, NULL, 10);
                 }
 
+                // Check if need to switch
                 if (switch_request != -1) {
+
                     // struct variant *var = c->variants[switch_request];
                     // c->switch_request = switch_request;
                     c->can_switch = 0;
                     for (int i = 0; i < c->n_videos i++) {
                         struct representation *pls = c->videos[i];
                         int64_t switch_timestamp;
-                        pls->cur_seq_no = select_cur_seq_no(c, pls);
+                        pls->cur_seq_no = calc_cur_seg_no(s, pls);
                         // if pls has same type to the segment just downloaded, switch should be delayed
                         if (type == SWITCH_VIDEO_AUDIO || representation_type_full(pls) == type) {
                             pls->cur_seq_no++;
