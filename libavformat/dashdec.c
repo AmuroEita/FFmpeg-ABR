@@ -2449,10 +2449,10 @@ static int dash_read_header(AVFormatContext *s)
             type = representation_type_simple(pls);
             if (type == SWITCH_AUDIO) {
                 if (c->switch_info[SWITCH_AUDIO].pls_index == -1)
-                    c->switch_info[SWITCH_AUDIO].pls_index = pls->index;
+                    c->switch_info[SWITCH_AUDIO].pls_index = pls->stream_index;
             } else {
                 if (c->switch_info[SWITCH_VIDEO].pls_index == -1)
-                    c->switch_info[SWITCH_VIDEO].pls_index = pls->index;
+                    c->switch_info[SWITCH_VIDEO].pls_index = pls->stream_index;
             }
         }
         av_dict_set_int(&c->abr_initial, "abr_init_duration", abr_init_duration, 0);
