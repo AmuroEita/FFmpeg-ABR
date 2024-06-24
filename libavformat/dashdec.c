@@ -290,7 +290,7 @@ static int64_t get_switch_timestamp(DASHContext *c, struct representation *pls)
     pos = first_timestamp == AV_NOPTS_VALUE ? 0 : first_timestamp;
 
     for (int i = 0; i < n; i++) {
-        pos += pls->fragments[i]->fragment_duration;
+        pos += pls->fragment_duration;
     }
     return pos;
 }
@@ -2447,7 +2447,7 @@ static int dash_read_header(AVFormatContext *s)
 
             int64_t start = 0;
             int64_t cur_seg_no = calc_cur_seg_no(s, pls);
-            for (int i = 0; i < cur_seq_no + 1; i++) {
+            for (int i = 0; i < cur_seg_no + 1; i++) {
                 start += pls->fragment_duration;
             }
             start = av_rescale_q(start,
