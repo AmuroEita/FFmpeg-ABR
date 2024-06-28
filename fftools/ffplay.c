@@ -30,6 +30,9 @@
 #include <signal.h>
 #include <stdint.h>
 
+#include <tensorflow/c/c_api.h>
+#include <pcap/pcap.h>
+
 #include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/eval.h"
