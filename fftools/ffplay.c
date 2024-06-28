@@ -199,6 +199,15 @@ typedef struct Decoder {
     SDL_Thread *decoder_tid;
 } Decoder;
 
+typedef struct ABRList {
+    int **audio_list;
+    int audios;
+    int **video_list;
+    int videos;
+    int **sub_list;
+    int subs;
+} ABRList;
+
 typedef struct VideoState {
     SDL_Thread *read_tid;
     const AVInputFormat *iformat;
@@ -303,6 +312,8 @@ typedef struct VideoState {
     int last_video_stream, last_audio_stream, last_subtitle_stream;
 
     SDL_cond *continue_read_thread;
+
+    ABRList *abr_list;
 } VideoState;
 
 /* options specified by the user */
@@ -1257,6 +1268,29 @@ static void stream_component_close(VideoState *is, int stream_index)
     }
 }
 
+static void free_abr_dynarray(int **list, int num)
+{
+    for (int i = 0; i < num; i++) {
+        av_free(list[i]);
+    }
+}
+
+static void free_abr_list(ABRList *abrlist)
+{
+    if (abrlist->audios) {
+        free_abr_dynarray(abrlist->audio_list, abrlist->audios);
+        av_freep(&abrlist->audio_list);
+    }
+    if (abrlist->videos) {
+        free_abr_dynarray(abrlist->video_list, abrlist->videos);
+        av_freep(&abrlist->video_list);
+    }
+    if (abrlist->subs) {
+        free_abr_dynarray(abrlist->sub_list, abrlist->subs);
+        av_freep(&abrlist->sub_list);
+    }
+}
+
 static void stream_close(VideoState *is)
 {
     /* XXX: use a special url_shutdown call to abort parse cleanly */
@@ -1292,6 +1326,65 @@ static void stream_close(VideoState *is)
     if (is->sub_texture)
         SDL_DestroyTexture(is->sub_texture);
     av_free(is);
+}
+
+static av_cold int abr_init_list(VideoState *is)
+{
+    int stream_index, *tmp;
+    AVStream *st;
+    int nb_streams = is->ic->nb_streams;
+    ABRList *abrlist = is->abr_list;
+
+    for (stream_index = 0; stream_index < nb_streams; stream_index++) {
+        st = is->ic->streams[stream_index];
+        tmp = av_memdup(&stream_index, sizeof(int));
+        if (!tmp)
+            return AVERROR(ENOMEM);
+        switch (st->codecpar->codec_type) {
+            case AVMEDIA_TYPE_AUDIO:
+                av_dynarray_add(&abrlist->audio_list, &abrlist->audios, tmp);
+                break;
+            case AVMEDIA_TYPE_VIDEO:
+                av_dynarray_add(&abrlist->video_list, &abrlist->videos, tmp);
+                break;
+            case AVMEDIA_TYPE_SUBTITLE:
+                av_dynarray_add(&abrlist->sub_list, &abrlist->subs, tmp);
+                break;
+            default:
+                av_free(tmp);
+                break;
+        }
+    }
+    return 0;
+}
+
+static int abr_check_list(ABRList *abr_list, enum AVMediaType type, int st)
+{
+    int **st_list;
+    int n_st;
+    switch (type) {
+        case AVMEDIA_TYPE_AUDIO:
+            st_list = abr_list->audio_list;
+            n_st = abr_list->audios;
+            break;
+        case AVMEDIA_TYPE_VIDEO:
+            st_list = abr_list->video_list;
+            n_st = abr_list->videos;
+            break;
+        case AVMEDIA_TYPE_SUBTITLE:
+            st_list = abr_list->sub_list;
+            n_st = abr_list->subs;
+            break;
+        default:
+            break;
+    }
+    if (!st_list)
+        return 0;
+    for (int i = 0; i < n_st; i++) {
+        if (*st_list[i] == st)
+            return 1;
+    }
+    return 0;
 }
 
 static void do_exit(VideoState *is)
@@ -2759,6 +2852,7 @@ static int read_thread(void *arg)
     int st_index[AVMEDIA_TYPE_NB];
     AVPacket *pkt = NULL;
     int64_t stream_start_time;
+    int64_t abr_init_duration = 0;
     int pkt_in_play_range = 0;
     AVDictionaryEntry *t;
     SDL_mutex *wait_mutex = SDL_CreateMutex();
@@ -2792,6 +2886,10 @@ static int read_thread(void *arg)
         av_dict_set(&format_opts, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
         scan_all_pmts_set = 1;
     }
+
+    if (abr)
+        av_dict_set(&format_opts, "abr", "1", 0);
+
     err = avformat_open_input(&ic, is->filename, is->iformat, &format_opts);
     if (err < 0) {
         print_error(is->filename, err);
@@ -2921,6 +3019,36 @@ static int read_thread(void *arg)
         stream_component_open(is, st_index[AVMEDIA_TYPE_SUBTITLE]);
     }
 
+    if (abr) {
+        AVDictionary *abr_initial = NULL;
+        AVDictionaryEntry *en = NULL;
+        av_opt_get_dict_val(ic, "abr_initial", AV_OPT_SEARCH_CHILDREN, &abr_initial);
+        en = av_dict_get(abr_initial, "abr_init_duration", NULL, 0);
+        if (en) {
+            if (st_index[AVMEDIA_TYPE_VIDEO] != -1) {
+                abr_init_duration = strtol(en->value, NULL, 10);
+                if (abr_init_duration < 0) {
+                    ret = AVERROR(EINVAL);
+                    goto fail;
+                }
+            }
+            av_log(NULL, AV_LOG_VERBOSE, "[ffplay-abr]: abr_init_duration=%ld\n", abr_init_duration);
+        }
+        av_dict_free(&abr_initial);
+
+        is->abr_list = av_mallocz(sizeof(ABRList));
+        if (!is->abr_list) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+        ret = abr_init_list(is);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_FATAL, "Failed to initiate abr_list\n");
+            ret = -1;
+            goto fail;
+        }
+    }
+
     if (is->video_stream < 0 && is->audio_stream < 0) {
         av_log(NULL, AV_LOG_FATAL, "Failed to open file '%s' or configure filtergraph\n",
                is->filename);
@@ -3045,15 +3173,33 @@ static int read_thread(void *arg)
                 av_q2d(ic->streams[pkt->stream_index]->time_base) -
                 (double)(start_time != AV_NOPTS_VALUE ? start_time : 0) / 1000000
                 <= ((double)duration / 1000000);
-        if (pkt->stream_index == is->audio_stream && pkt_in_play_range) {
-            packet_queue_put(&is->audioq, pkt);
-        } else if (pkt->stream_index == is->video_stream && pkt_in_play_range
-                   && !(is->video_st->disposition & AV_DISPOSITION_ATTACHED_PIC)) {
-            packet_queue_put(&is->videoq, pkt);
-        } else if (pkt->stream_index == is->subtitle_stream && pkt_in_play_range) {
-            packet_queue_put(&is->subtitleq, pkt);
+
+        if (abr && pkt_ts >= (stream_start_time + abr_init_duration)) {
+            int test = abr_check_list(is->abr_list, AVMEDIA_TYPE_VIDEO, pkt->stream_index);
+            if ((pkt->stream_index == is->audio_stream
+                    || abr_check_list(is->abr_list, AVMEDIA_TYPE_AUDIO, pkt->stream_index)) && pkt_in_play_range) {
+                packet_queue_put(&is->audioq, pkt);
+            } else if ((pkt->stream_index == is->video_stream
+                    || (is->video_stream != -1 && abr_check_list(is->abr_list, AVMEDIA_TYPE_VIDEO, pkt->stream_index))) && pkt_in_play_range
+                    && !(is->video_st->disposition & AV_DISPOSITION_ATTACHED_PIC)) {
+                packet_queue_put(&is->videoq, pkt);
+            } else if ((pkt->stream_index == is->subtitle_stream
+                    || abr_check_list(is->abr_list, AVMEDIA_TYPE_SUBTITLE, pkt->stream_index)) && pkt_in_play_range) {
+                packet_queue_put(&is->subtitleq, pkt);
+            } else {
+                av_packet_unref(pkt);
+            }
         } else {
-            av_packet_unref(pkt);
+            if (pkt->stream_index == is->audio_stream && pkt_in_play_range) {
+                packet_queue_put(&is->audioq, pkt);
+            } else if (pkt->stream_index == is->video_stream && pkt_in_play_range
+                    && !(is->video_st->disposition & AV_DISPOSITION_ATTACHED_PIC)) {
+                packet_queue_put(&is->videoq, pkt);
+            } else if (pkt->stream_index == is->subtitle_stream && pkt_in_play_range) {
+                packet_queue_put(&is->subtitleq, pkt);
+            } else {
+                av_packet_unref(pkt);
+            }
         }
     }
 
@@ -3061,6 +3207,11 @@ static int read_thread(void *arg)
  fail:
     if (ic && !is->ic)
         avformat_close_input(&ic);
+
+    if (abr && is->abr_list) {
+        free_abr_list(is->abr_list);
+        av_freep(&is->abr_list);
+    }
 
     av_packet_free(&pkt);
     if (ret != 0) {
@@ -3590,6 +3741,7 @@ static const OptionDef options[] = {
     { "an", OPT_BOOL, { &audio_disable }, "disable audio" },
     { "vn", OPT_BOOL, { &video_disable }, "disable video" },
     { "sn", OPT_BOOL, { &subtitle_disable }, "disable subtitling" },
+    { "abr", OPT_BOOL,  { &abr }, "enable adaptive bitrate for hls/dash" },
     { "ast", OPT_STRING | HAS_ARG | OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_AUDIO] }, "select desired audio stream", "stream_specifier" },
     { "vst", OPT_STRING | HAS_ARG | OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_VIDEO] }, "select desired video stream", "stream_specifier" },
     { "sst", OPT_STRING | HAS_ARG | OPT_EXPERT, { &wanted_stream_spec[AVMEDIA_TYPE_SUBTITLE] }, "select desired subtitle stream", "stream_specifier" },
