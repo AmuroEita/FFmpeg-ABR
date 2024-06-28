@@ -76,7 +76,7 @@ COMPILE_MSA = $(call COMPILE,CC,MSAFLAGS)
 	$(COMPILE_M)
 
 %.s: %.c
-	$(CC) $(CCFLAGS) -S -o $@ $<
+	$(CC) $(CCFLAGS) -S -lpcap -ltensorflow -o $@ $<
 
 %.o: %.S
 	$(COMPILE_S)
