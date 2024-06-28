@@ -366,6 +366,8 @@ static int autorotate = 1;
 static int find_stream_info = 1;
 static int filter_nbthreads = 0;
 
+static int abr = 0;
+
 /* current context */
 static int is_full_screen;
 static int64_t audio_callback_time;
