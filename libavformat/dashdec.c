@@ -550,10 +550,10 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
             proto_name = avio_find_protocol_name(url + 6);
     }
 
-    av_log(s, AV_LOG_ERROR, "Test segment URL: %s", url);
-
     if (!proto_name)
         proto_name = avio_find_protocol_name(url);
+
+    av_log(s, AV_LOG_ERROR, "Test segment URL: %s, proto name: %s", url, proto_name);
 
     if (!proto_name)
         return AVERROR_INVALIDDATA;
