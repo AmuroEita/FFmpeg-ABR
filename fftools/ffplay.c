@@ -369,9 +369,8 @@ static int autorotate = 1;
 static int find_stream_info = 1;
 static int filter_nbthreads = 0;
 
-static int abr = 0;
-
 /* current context */
+static int abr = 0;
 static int is_full_screen;
 static int64_t audio_callback_time;
 
@@ -2729,7 +2728,7 @@ static int stream_component_open(VideoState *is, int stream_index)
         goto fail;
     }
     if ((t = av_dict_get(opts, "", NULL, AV_DICT_IGNORE_SUFFIX))) {
-        av_log(NULL, AV_LOG_ERROR, "Option %s not found.\n", t->key);
+        av_log(NULL, AV_LOG_ERROR, "Test Option %s not found.\n", t->key);
         ret =  AVERROR_OPTION_NOT_FOUND;
         goto fail;
     }
@@ -2892,9 +2891,6 @@ static int read_thread(void *arg)
         scan_all_pmts_set = 1;
     }
 
-    if (abr)
-        av_dict_set(&format_opts, "abr", "1", 0);
-
     err = avformat_open_input(&ic, is->filename, is->iformat, &format_opts);
     if (err < 0) {
         print_error(is->filename, err);
@@ -2905,7 +2901,7 @@ static int read_thread(void *arg)
         av_dict_set(&format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE);
 
     if ((t = av_dict_get(format_opts, "", NULL, AV_DICT_IGNORE_SUFFIX))) {
-        av_log(NULL, AV_LOG_ERROR, "Option %s not found.\n", t->key);
+        av_log(NULL, AV_LOG_ERROR, "Test option %s not found.\n", t->key);
         ret = AVERROR_OPTION_NOT_FOUND;
         goto fail;
     }
@@ -3027,6 +3023,9 @@ static int read_thread(void *arg)
     if (abr) {
         AVDictionary *abr_initial = NULL;
         AVDictionaryEntry *en = NULL;
+
+
+
         av_opt_get_dict_val(ic, "abr_initial", AV_OPT_SEARCH_CHILDREN, &abr_initial);
         en = av_dict_get(abr_initial, "abr_init_duration", NULL, 0);
         if (en) {
