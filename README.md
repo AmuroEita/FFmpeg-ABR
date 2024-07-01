@@ -38,6 +38,12 @@ Ubuntu 22.0.4
 
 ### Compile
 
-  ```sh
-  sh build.sh
-  ```
+```sh
+sh build.sh
+```
+
+### Play
+
+```sh
+./ffplay -abr -abr-params format=dash ffabr:$(dash source url)
+```
