@@ -16,6 +16,11 @@ Ubuntu 22.0.4
   sudo tar -C /usr/local -xzf libtensorflow-gpu-linux-x86_64-2.6.0.tar.gz
   ```
 
+* Libpcap-dev
+  ```sh
+  sudo apt-get install libpcap-dev
+  ```
+
 * Libxml 2.0
   ```sh
   sudo apt-get install libxml2-dev
