@@ -4,7 +4,11 @@ FFmpeg-ABR README
 FFmpeg-ABR is a multimedia content for ABR research, based on FFmpeg, typically used for DASH/HLS adaptive bitrate testing.
 
 
+## Getting Started
+
 ### Prerequisites
+
+Ubuntu 22.0.4
 
 * Libtensorflow
   ```sh
@@ -20,4 +24,15 @@ FFmpeg-ABR is a multimedia content for ABR research, based on FFmpeg, typically 
 * Libssl-dev
   ```sh
   sudo apt-get install libssl-dev
+  ```
+
+* Libsdl2-dev
+  ```sh
+  sudo apt-get install libsdl2-dev
+  ```
+
+### Compile
+
+  ```sh
+  sh build.sh
   ```
