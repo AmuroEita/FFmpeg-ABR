@@ -553,7 +553,7 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
     if (!proto_name)
         proto_name = avio_find_protocol_name(url);
 
-    av_log(s, AV_LOG_ERROR, "Test segment URL: %s, proto name: %s", url, proto_name);
+    av_log(s, AV_LOG_VERBOSE, "Test segment URL: %s, proto name: %s\n", url, proto_name);
 
     if (!proto_name)
         return AVERROR_INVALIDDATA;
@@ -586,6 +586,7 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
     av_dict_copy(&tmp, *opts, 0);
     av_dict_copy(&tmp, opts2, 0);
     ret = avio_open2(pb, url, AVIO_FLAG_READ, c->interrupt_callback, &tmp);
+
     if (ret >= 0) {
         // update cookies on http response with setcookies.
         char *new_cookies = NULL;
@@ -597,76 +598,76 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
             av_dict_set(opts, "cookies", new_cookies, AV_DICT_DONT_STRDUP_VAL);
         }
 
-        if (c->abr) {
-            AVDictionary *abr_ret = NULL;
-            AVDictionaryEntry *en = NULL;
-            struct fragment *seg;
-            int pb_size, switch_request;
-            enum SwitchType type;
-            av_opt_get_dict_val(*pb, "abr-metadata", AV_OPT_SEARCH_CHILDREN, &abr_ret);
+        // if (c->abr) {
+        //     AVDictionary *abr_ret = NULL;
+        //     AVDictionaryEntry *en = NULL;
+        //     struct fragment *seg;
+        //     int pb_size, switch_request;
+        //     enum SwitchType type;
+        //     av_opt_get_dict_val(*pb, "abr-metadata", AV_OPT_SEARCH_CHILDREN, &abr_ret);
 
-            if (abr_ret) {
-                en = av_dict_get(abr_ret, "download_time", NULL, 0);
-                if (en) {
-                    pb_size = avio_size(*pb);
-                    update_throughputs(c->throughputs, strtol(en->value, NULL, 10) / 1000.0, pb_size);
-                    av_log(s, AV_LOG_VERBOSE, "[dash abr] time=%.2fms, size=%.2fkb\n",
-                                strtol(en->value, NULL, 10) / 1000.0, pb_size / 1000.0);
-                }
+        //     if (abr_ret) {
+        //         en = av_dict_get(abr_ret, "download_time", NULL, 0);
+        //         if (en) {
+        //             pb_size = avio_size(*pb);
+        //             update_throughputs(c->throughputs, strtol(en->value, NULL, 10) / 1000.0, pb_size);
+        //             av_log(s, AV_LOG_VERBOSE, "[dash abr] time=%.2fms, size=%.2fkb\n",
+        //                         strtol(en->value, NULL, 10) / 1000.0, pb_size / 1000.0);
+        //         }
 
-                en = av_dict_get(abr_ret, "switch_request", NULL, 0);
-                if (en) {
-                    switch_request = strtol(en->value, NULL, 10);
-                    if (switch_request != -1)
-                        av_log(s, AV_LOG_INFO, "[abr] switch request: %s\n", en->value);
-                    }
+        //         en = av_dict_get(abr_ret, "switch_request", NULL, 0);
+        //         if (en) {
+        //             switch_request = strtol(en->value, NULL, 10);
+        //             if (switch_request != -1)
+        //                 av_log(s, AV_LOG_INFO, "[abr] switch request: %s\n", en->value);
+        //             }
 
-                en = av_dict_get(abr_ret, "type", NULL, 0);
-                if (en) {
-                    type = strtol(en->value, NULL, 10);
-                }
+        //         en = av_dict_get(abr_ret, "type", NULL, 0);
+        //         if (en) {
+        //             type = strtol(en->value, NULL, 10);
+        //         }
 
-                // Check if need to switch
-                if (switch_request != -1) {
+        //         // Check if need to switch
+        //         if (switch_request != -1) {
 
-                    // struct variant *var = c->variants[switch_request];
-                    // c->switch_request = switch_request;
-                    c->can_switch = 0;
-                    for (int i = 0; i < c->n_videos; i++) {
-                        struct representation *pls = c->videos[i];
-                        int64_t switch_timestamp;
-                        pls->cur_seq_no = calc_cur_seg_no(s, pls);
-                        // if pls has same type to the segment just downloaded, switch should be delayed
-                        if (type == SWITCH_VIDEO_AUDIO || representation_type_full(pls) == type) {
-                            pls->cur_seq_no++;
-                        }
+        //             // struct variant *var = c->variants[switch_request];
+        //             // c->switch_request = switch_request;
+        //             c->can_switch = 0;
+        //             for (int i = 0; i < c->n_videos; i++) {
+        //                 struct representation *pls = c->videos[i];
+        //                 int64_t switch_timestamp;
+        //                 pls->cur_seq_no = calc_cur_seg_no(s, pls);
+        //                 // if pls has same type to the segment just downloaded, switch should be delayed
+        //                 if (type == SWITCH_VIDEO_AUDIO || representation_type_full(pls) == type) {
+        //                     pls->cur_seq_no++;
+        //                 }
 
-                        if (c->switch_step == 2) {
-                            seg = next2_fragment(pls);
-                        } else {
-                            seg = next_fragment(pls);
-                        }
+        //                 if (c->switch_step == 2) {
+        //                     seg = next2_fragment(pls);
+        //                 } else {
+        //                     seg = next_fragment(pls);
+        //                 }
 
-                        switch_timestamp = get_switch_timestamp(c,  pls);
-                        if (!seg || switch_timestamp == -1) {
-                            c->switch_request = -1;
-                            av_log(s, AV_LOG_INFO, "[abr] no more segment need to switch\n");
-                        } else {
-                            int ptype;
-                            ptype = representation_type_simple(pls);
-                            c->switch_tasks[pls->stream_index].type = ptype;
-                            c->switch_tasks[pls->stream_index].switch_timestamp = switch_timestamp - c->switch_info[ptype].delta_timestamp * 1.5;
-                            av_log(s, AV_LOG_INFO, "[dash abr] switch type: %d timestamp: %ld\n",
-                                    c->switch_tasks[pls->stream_index].type, c->switch_tasks[pls->stream_index].switch_timestamp);
-                            if (c->switch_step == 2) {
-                                ret = open_input(c, pls, seg);
-                            }
-                        }
-                    }
-                }
-            }
-            av_dict_free(&abr_ret);
-        }
+        //                 switch_timestamp = get_switch_timestamp(c,  pls);
+        //                 if (!seg || switch_timestamp == -1) {
+        //                     c->switch_request = -1;
+        //                     av_log(s, AV_LOG_INFO, "[abr] no more segment need to switch\n");
+        //                 } else {
+        //                     int ptype;
+        //                     ptype = representation_type_simple(pls);
+        //                     c->switch_tasks[pls->stream_index].type = ptype;
+        //                     c->switch_tasks[pls->stream_index].switch_timestamp = switch_timestamp - c->switch_info[ptype].delta_timestamp * 1.5;
+        //                     av_log(s, AV_LOG_INFO, "[dash abr] switch type: %d timestamp: %ld\n",
+        //                             c->switch_tasks[pls->stream_index].type, c->switch_tasks[pls->stream_index].switch_timestamp);
+        //                     if (c->switch_step == 2) {
+        //                         ret = open_input(c, pls, seg);
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     av_dict_free(&abr_ret);
+        // }
     }
 
     av_dict_free(&tmp);
@@ -1956,7 +1957,9 @@ static int open_input(DASHContext *c, struct representation *pls, struct fragmen
         av_dict_set(&opts, "abr-params", abr_opts, 0);
         av_free(abr_opts);
 
-        snprintf(url, sizeof(url), "ffabr:%s", seg->url);
+        // snprintf(url, sizeof(url), "ffabr:%s", seg->url);
+        // sscanf(url, "ffabr:%s", &seg->url);
+        // av_log(c, AV_LOG_VERBOSE, "Url extracted: %s\n", url);
     }
 
     ret = open_url(pls->parent, &pls->input, url, &c->avio_opts, opts, NULL);
@@ -2452,11 +2455,11 @@ static int dash_read_header(AVFormatContext *s)
             for (int i = 0; i < cur_seg_no + 1; i++) {
                 start += pls->fragment_duration;
             }
-            start = av_rescale_q(start,
-                                    AV_TIME_BASE_Q,
-                                    get_timebase(pls));
-            if (abr_init_duration == AV_NOPTS_VALUE || abr_init_duration > start)
-                abr_init_duration = start;
+            // start = av_rescale_q(start,
+            //                         AV_TIME_BASE_Q,
+            //                         get_timebase(pls));
+            // if (abr_init_duration == AV_NOPTS_VALUE || abr_init_duration > start)
+            //     abr_init_duration = start;
 
             c->switch_tasks[i].switch_timestamp = AV_NOPTS_VALUE;
             type = representation_type_simple(pls);
@@ -2694,6 +2697,8 @@ static int dash_probe(const AVProbeData *p)
 #define OFFSET(x) offsetof(DASHContext, x)
 #define FLAGS AV_OPT_FLAG_DECODING_PARAM
 static const AVOption dash_options[] = {
+    {"abr", "enable abr to switch streams",
+        OFFSET(abr), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS },
     {"allowed_extensions", "List of file extensions that dash is allowed to access",
         OFFSET(allowed_extensions), AV_OPT_TYPE_STRING,
         {.str = "aac,m4a,m4s,m4v,mov,mp4,webm,ts"},

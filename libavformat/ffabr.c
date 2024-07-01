@@ -163,7 +163,7 @@ static int abr_open(URLContext *h, const char *uri, int flags, AVDictionary **op
     ABRContext *c = h->priv_data;
     AVDictionaryEntry *en = NULL;
 
-    if (!av_strstart(uri, "ffabr:", &nested_url) && !av_strstart(uri, "ffabr+", &nested_url)) {
+    if (!av_strstart(uri, "ffabr:", &nested_url)) {
         av_log(h, AV_LOG_ERROR, "Unsupported url %s\n", uri);
         return AVERROR(EINVAL);
     }
