@@ -1,0 +1,1 @@
+sudo gcc utils.c netdissect.c print.c dumper.c -lpcap -o dumper && sudo setcap cap_net_raw+eip dumper
