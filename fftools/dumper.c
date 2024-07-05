@@ -19,7 +19,6 @@
 
 #include <string.h>
 #include <stdlib.h>
-#include <pcap.h>
 #include <arpa/inet.h>
 #include <netinet/ip.h>
 #include <time.h>
@@ -39,145 +38,150 @@ static pcap_t *pd;
 static void 
 test (char *user, const struct pcap_pkthdr *h, const char *sp)
 {
-	printf("----- testing ----- \n");
+	static int count = 1;
+    fprintf(stdout,"%d, ",count);
+    fflush(stdout);
+    count++;
 }
 
 static void
 print_packet(char *user, const struct pcap_pkthdr *h, const char *sp)
 {
 	++packets_captured;
-	printf("-----\n");
 	pretty_print_packet((netdissect_options *)user, h, sp, packets_captured);
-}
-
-static pcap_t *
-open_interface(const char *device, netdissect_options *ndo, char *ebuf)
-{
-	pcap_t *pc;
-	int status;
-	char *cp;
-
-	pc = pcap_create(device, ebuf);
-	if (pc == NULL) {
-		/*
-		 * If this failed with "No such device", that means
-		 * the interface doesn't exist; return NULL, so that
-		 * the caller can see whether the device name is
-		 * actually an interface index.
-		 */
-		if (strstr(ebuf, "No such device") != NULL)
-			return (NULL);
-		error("%s", ebuf);
-	}
-
-	if (ndo->ndo_snaplen != 0) {
-		/*
-		 * A snapshot length was explicitly specified;
-		 * use it.
-		 */
-		status = pcap_set_snaplen(pc, ndo->ndo_snaplen);
-		if (status != 0)
-			error("%s: Can't set snapshot length: %s",
-			    device, pcap_statustostr(status));
-	}
-
-	status = pcap_activate(pc);
-	if (status < 0) {
-		/*
-		 * pcap_activate() failed.
-		 */
-		cp = pcap_geterr(pc);
-		if (status == PCAP_ERROR)
-			error("%s", cp);
-		else if (status == PCAP_ERROR_NO_SUCH_DEVICE) {
-			/*
-			 * Return an error for our caller to handle.
-			 */
-			snprintf(ebuf, PCAP_ERRBUF_SIZE, "%s: %s\n(%s)",
-			    device, pcap_statustostr(status), cp);
-		} else if (status == PCAP_ERROR_PERM_DENIED && *cp != '\0')
-			error("%s: %s\n(%s)", device,
-			    pcap_statustostr(status), cp);
-
-		else
-			error("%s: %s", device,
-			    pcap_statustostr(status));
-		pcap_close(pc);
-		return (NULL);
-	} else if (status > 0) {
-		/*
-		 * pcap_activate() succeeded, but it's warning us
-		 * of a problem it had.
-		 */
-		cp = pcap_geterr(pc);
-	}
-
-	return (pc);
 }
 
 void dumper()
 {
-    int status, cnt;
-    char *pcap_userdata, *device;
-    pcap_handler callback;
-    char ebuf[PCAP_ERRBUF_SIZE];
-
-    device = NULL;
     
-    netdissect_options Ndo;
+}
+
+static char *
+copy_argv(char **argv)
+{
+	char **p;
+	size_t len = 0;
+	char *buf;
+	char *src, *dst;
+
+	p = argv;
+	if (*p == NULL)
+		return 0;
+
+	while (*p)
+		len += strlen(*p++) + 1;
+
+	buf = (char *)malloc(len);
+	if (buf == NULL)
+		error("%s: malloc", __func__);
+
+	p = argv;
+	dst = buf;
+	while ((src = *p++) != NULL) {
+		while ((*dst++ = *src++) != '\0')
+			;
+		dst[-1] = ' ';
+	}
+	dst[-1] = '\0';
+
+	return buf;
+}
+
+int optind, opterr = 1, optopt;
+
+static void
+info(int verbose)
+{
+	struct pcap_stat stats;
+
+	(void)fprintf(stderr, "%u packet%s captured", packets_captured,
+	    PLURAL_SUFFIX(packets_captured));
+	if (!verbose)
+		fputs(", ", stderr);
+	else
+		putc('\n', stderr);
+	(void)fprintf(stderr, "%u packet%s received by filter", stats.ps_recv,
+	    PLURAL_SUFFIX(stats.ps_recv));
+	if (!verbose)
+		fputs(", ", stderr);
+	else
+		putc('\n', stderr);
+	(void)fprintf(stderr, "%u packet%s dropped by kernel", stats.ps_drop,
+	    PLURAL_SUFFIX(stats.ps_drop));
+	if (stats.ps_ifdrop != 0) {
+		if (!verbose)
+			fputs(", ", stderr);
+		else
+			putc('\n', stderr);
+		(void)fprintf(stderr, "%u packet%s dropped by interface\n",
+		    stats.ps_ifdrop, PLURAL_SUFFIX(stats.ps_ifdrop));
+	} else
+		putc('\n', stderr);
+}
+
+int main()
+{
+	int cnt, op, i;
+	bpf_u_int32 localnet = 0, netmask = 0;
+	char *cp, *infile, *filter_exp, *device;
+	char *endp;
+	pcap_handler callback;
+	int dlt;
+	const char *dlt_name;
+	struct bpf_program fcode;
+
+	char *pcap_userdata;
+	char ebuf[PCAP_ERRBUF_SIZE];
+
+	netdissect_options Ndo;
 	netdissect_options *ndo = &Ndo;
 
-    /*
-	 * Initialize the netdissect code.
-	 */
 	if (nd_init(ebuf, sizeof(ebuf)) == -1)
 		error("%s", ebuf);
 
 	memset(ndo, 0, sizeof(*ndo));
 	ndo_set_function_pointers(ndo);
 
-    device = pcap_lookupdev(ebuf);
-    if (device == NULL) {
-        fprintf(stderr, "Couldn't find default device: %s\n", ebuf);
-        return;
-    }
+	cnt = -1;
+	device = NULL;
+	dlt = -1;
 
-    printf("Device: %s\n", device);
+	ndo->ndo_snaplen = 0;
 
-    pd = open_interface(device, ndo, ebuf);
-    if (pd == NULL) {
-        printf("%s\n", ebuf);
-        return;
-    }
+	device = "wlp0s20f3";
 
-	printf("Point A \n");
+	pd = pcap_open_live(device, BUFSIZ, 0, -1, ebuf);
 
-    callback = print_packet;
-	// callback = test;
+	filter_exp = "tcp dst port 80 and tcp[((tcp[12:1] & 0xf0) >> 2):4] = 0x47455420";
+	// filter_exp = "tcp port 80 and (((ip[2:2] - ((ip[0]&0xf)<<2)) - ((tcp[12]&0xf0)>>2)) != 0)";
+
+	if (pcap_compile(pd, &fcode, filter_exp, 1, netmask) < 0)
+		error("%s", pcap_geterr(pd));
+
+	if (pcap_setfilter(pd, &fcode) < 0)
+		error("%s", pcap_geterr(pd));
+
+	dlt = pcap_datalink(pd);
+	ndo->ndo_if_printer = get_if_printer(dlt);
+
+	callback = print_packet;
 	pcap_userdata = (char *)ndo;
 
-	printf("Point B \n");
-
-    do {
-		printf("Point C start \n");
-        status = pcap_loop(pd, cnt, callback, pcap_userdata);
-		printf("Point C %d \n", status);
-        if (status == -1) {
-            printf("Error in pcap_loop\n");
-        }
-    }
-    while (status != -2);
-
-    fprintf(stdout, "%u packet%s\n", packets_captured,
+	/*
+	* Live capture (if -V was specified, we set RFileName
+	* to a file from the -V file).  Print a message to
+	* the standard error on UN*X.
+	*/
+	dlt = pcap_datalink(pd);
+	dlt_name = pcap_datalink_val_to_name(dlt);
+	(void)fprintf(stderr, "listening on %s", device);
+	(void)fprintf(stderr, ", link-type %u\n", dlt);
+	
+	pcap_loop(pd, cnt, callback, pcap_userdata);
+	
+	fprintf(stdout, "%u packet%s\n", packets_captured,
 		PLURAL_SUFFIX(packets_captured));
-}
 
-int main()
-{
-    while(1)
-    {
-        dumper();
-        // sleep(1);
-    }
-    return 0;
-} 
+	free(filter_exp);
+	pcap_freecode(&fcode);
+}

@@ -1,7 +1,21 @@
+#include <time.h>
+
 #include "print.h"
+
+#define DLT_EN10MB	1	/* Ethernet (10Mb) */
 
 enum date_flag { WITHOUT_DATE = 0, WITH_DATE = 1 };
 enum time_flag { UTC_TIME = 0, LOCAL_TIME = 1 };
+
+struct printer {
+	if_printer f;
+	int type;
+};
+
+static const struct printer printers[] = {
+	{ ether_if_print,	DLT_EN10MB },
+	{ NULL,                 0 },
+};
 
 static void
 hex_and_ascii_print_with_offset(netdissect_options *ndo, const char *indent,
@@ -120,6 +134,11 @@ ts_date_hmsfrac_print(netdissect_options *ndo, const struct timeval *tv,
 		ND_PRINT("[timestamp < 1970-01-01 00:00:00 UTC]");
 		return;
 	}
+	
+	if (time_flag == LOCAL_TIME)
+		tm = localtime(&tv->tv_sec);
+	else
+		tm = gmtime(&tv->tv_sec);
 
 	if (date_flag == WITH_DATE) {
 		timestr = nd_format_time(timebuf, sizeof(timebuf),
@@ -133,14 +152,72 @@ ts_date_hmsfrac_print(netdissect_options *ndo, const struct timeval *tv,
 	ND_PRINT(".%06u", (unsigned)tv->tv_usec);
 }
 
+void
+ascii_print(netdissect_options *ndo,
+            const char *cp, int length)
+{
+	int caplength;
+	char s;
+	int truncated = FALSE;
+
+	ndo->ndo_protocol = "ascii";
+	caplength = ND_BYTES_AVAILABLE_AFTER(cp);
+	if (length > caplength) {
+		length = caplength;
+		truncated = TRUE;
+	}
+	ND_PRINT("\n");
+	while (length != 0) {
+		s = GET_U_1(cp);
+		cp++;
+		length--;
+		if (s == '\r') {
+			/*
+			 * Don't print CRs at the end of the line; they
+			 * don't belong at the ends of lines on UN*X,
+			 * and the standard I/O library will give us one
+			 * on Windows so we don't need to print one
+			 * ourselves.
+			 *
+			 * In the middle of a line, just print a '.'.
+			 */
+			if (length > 1 && GET_U_1(cp) != '\n')
+				ND_PRINT(".");
+		} else {
+			if (!ND_ASCII_ISGRAPH(s) &&
+			    (s != '\t' && s != ' ' && s != '\n'))
+				ND_PRINT(".");
+			else
+				ND_PRINT("%c", s);
+		}
+	}
+}
+
 /*
  * Print the timestamp
  */
 void
 ts_print(netdissect_options *ndo,
-         const struct timeval *tvp)
+         const struct timeval *tv)
 {
-	ts_date_hmsfrac_print(ndo, tvp, WITHOUT_DATE, LOCAL_TIME);
+	printf("ssssss ");
+
+	struct tm *tm;
+	char timebuf[32];
+	const char *timestr;
+
+	if (tv->tv_sec < 0) {
+		printf("[timestamp < 1970-01-01 00:00:00 UTC]");
+		return;
+	}
+	
+	tm = localtime(&tv->tv_sec);
+
+	timestr = nd_format_time(timebuf, sizeof(timebuf),
+		    "%H:%M:%S", tm);
+
+	printf("%s", timestr);
+	printf(".%06u", (unsigned)tv->tv_usec);
 	ND_PRINT(" ");
 }
 
@@ -150,15 +227,6 @@ pretty_print_packet(netdissect_options *ndo, const struct pcap_pkthdr *h,
 {
 	int hdrlen = 0;
 	int invalid_header = 0;
-
-	if (ndo->ndo_print_sampling && packets_captured % ndo->ndo_print_sampling != 0)
-		return;
-
-	if (ndo->ndo_packet_number)
-		ND_PRINT("%5u  ", packets_captured);
-
-	if (ndo->ndo_lengths)
-		ND_PRINT("caplen %u len %u ", h->caplen, h->len);
 
 	/* Sanity checks on packet length / capture length */
 	if (h->caplen == 0) {
@@ -201,28 +269,23 @@ pretty_print_packet(netdissect_options *ndo, const struct pcap_pkthdr *h,
 		return;
 	}
 
-	/*
-	 * At this point:
-	 *   capture length != 0,
-	 *   packet length != 0,
-	 *   capture length <= MAXIMUM_SNAPLEN,
-	 *   packet length <= MAXIMUM_SNAPLEN,
-	 *   packet length >= capture length.
-	 *
-	 * Currently, there is no D-Bus printer, thus no need for
-	 * bigger lengths.
-	 */
+	struct timeval tv;
+	tv.tv_sec = h->ts.tv_sec;
+	tv.tv_usec = h->ts.tv_usec;
 
-	/*
-	 * The header /usr/include/pcap/pcap.h in OpenBSD declares h->ts as
-	 * struct bpf_timeval, not struct timeval. The former comes from
-	 * /usr/include/net/bpf.h and uses 32-bit unsigned types instead of
-	 * the types used in struct timeval.
-	 */
-	struct timeval tvbuf;
-	tvbuf.tv_sec = h->ts.tv_sec;
-	tvbuf.tv_usec = h->ts.tv_usec;
-	ts_print(ndo, &tvbuf);
+	struct tm *tm;
+	char timebuf[64];
+
+	if (tv.tv_sec < 0) {
+		ND_PRINT("[timestamp < 1970-01-01 00:00:00 UTC]");
+		return;
+	}
+	
+	tm = localtime(&tv.tv_sec);
+
+   	if (tm != NULL && strftime(timebuf, 64, "%H:%M:%S", tm) != 0)
+		ND_PRINT("%s", timebuf);
+	ND_PRINT(".%06u", (unsigned)tv.tv_usec);
 
 	/*
 	 * Printers must check that they're not walking off the end of
@@ -244,14 +307,52 @@ pretty_print_packet(netdissect_options *ndo, const struct pcap_pkthdr *h,
 	}
 	hdrlen = ndo->ndo_ll_hdr_len;
 
-	/*
-	 * Empty the stack of packet information, freeing all pushed buffers;
-	 * if we got here by a printer quitting, we need to release anything
-	 * that didn't get released because we longjmped out of the code
-	 * before it popped the packet information.
-	 */
 	nd_pop_all_packet_info(ndo);
+
+	ndo->ndo_snapend = sp + h->caplen;
+	ndo->ndo_packetp = sp;
+
+	if (h->caplen > hdrlen)
+		ascii_print(ndo, sp + hdrlen, h->caplen - hdrlen);
 
 	ND_PRINT("\n");
 	nd_free_all(ndo);
+}
+
+if_printer
+lookup_printer(int type)
+{
+	const struct printer *p;
+
+	for (p = printers; p->f; ++p)
+		if (type == p->type)
+			return p->f;
+	return NULL;
+}
+
+void nd_print_protocol_caps(netdissect_options *ndo)
+{
+	const char *p;
+        for (p = ndo->ndo_protocol; *p != '\0'; p++)
+                ND_PRINT("%c", ND_ASCII_TOUPPER(*p));
+}
+
+void
+unsupported_if_print(netdissect_options *ndo, const struct pcap_pkthdr *h,
+		     const char *p)
+{
+	ndo->ndo_protocol = "unsupported";
+	nd_print_protocol_caps(ndo);
+	hex_and_ascii_print(ndo, "\n\t", p, h->caplen);
+}
+
+if_printer
+get_if_printer(int type)
+{
+	if_printer printer;
+
+	printer = lookup_printer(type);
+	if (printer == NULL)
+		printer = unsupported_if_print;
+	return printer;
 }

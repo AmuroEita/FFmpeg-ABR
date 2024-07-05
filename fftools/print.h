@@ -16,7 +16,6 @@
 #endif
 
 #define PRINTFLIKE(x,y) __attribute__((__format__(__printf__,x,y)))
-#define ND_PRINT(...) (ndo->ndo_printf)(ndo, __VA_ARGS__)
 #define FORMAT_STRING(p) p
 
 #define ND_MICRO_PER_SEC 1000000
@@ -53,6 +52,10 @@
 
 #define EXTRACT_U_1(p)	((uint8_t)(*(p)))
 
+#define ND_BYTES_BETWEEN(p1, p2) ((const char *)(p1) >= (const char *)(p2) ? 0 : ((u_int)(((const char *)(p2)) - (const char *)(p1))))
+
+#define ND_BYTES_AVAILABLE_AFTER(p) ((const u_char *)(p) < ndo->ndo_packetp ? 0 : ND_BYTES_BETWEEN((p), ndo->ndo_snapend))
+
 #define GET_U_1(p) get_u_1(ndo, (const char *)(p))
 static inline uint8_t
 get_u_1(netdissect_options *ndo, const char *p)
@@ -60,8 +63,20 @@ get_u_1(netdissect_options *ndo, const char *p)
 	return EXTRACT_U_1(p);
 }
 
+#define IF_PRINTER_ARGS (netdissect_options *, const struct pcap_pkthdr *, const char *)
+
+typedef void (*if_printer) IF_PRINTER_ARGS;
+
+#define ND_ASCII_TOUPPER(c)	(((c) >= 'a' && (c) <= 'z') ? (c) - 'a' + 'A' : (c))
+
 void pretty_print_packet(netdissect_options *ndo,
 	 const struct pcap_pkthdr *h, const char *sp,
      int packets_captured);
 
 void ndo_set_function_pointers(netdissect_options *ndo);
+
+void ascii_print(netdissect_options *, const char *, int);
+
+if_printer get_if_printer(int type);
+
+

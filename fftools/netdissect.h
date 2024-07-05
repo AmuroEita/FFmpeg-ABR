@@ -1,8 +1,10 @@
 #ifndef netdissect_h
 #define netdissect_h
 #endif
+// 
 
 #include <setjmp.h>
+#include <pcap.h>
 
 #define MAXIMUM_SNAPLEN	262144
 
@@ -19,6 +21,13 @@ typedef void (*if_printer) IF_PRINTER_ARGS;
 #define ND_BYTES_BETWEEN(p1, p2) ((const char *)(p1) >= (const char *)(p2) ? 0 : ((int)(((const char *)(p2)) - (const char *)(p1))))
 
 #define ND_BYTES_AVAILABLE_AFTER(p) ((const u_char *)(p) < ndo->ndo_packetp ? 0 : ND_BYTES_BETWEEN((p), ndo->ndo_snapend))
+
+#define ND_PRINT(...) (ndo->ndo_printf)(ndo, __VA_ARGS__)
+
+#define MAC48_LEN	6U		/* length of MAC addresses */
+typedef unsigned char nd_mac48[MAC48_LEN];
+
+typedef unsigned char nd_uint16_t[2];
 
 struct netdissect_saved_packet_info {
     char *ndspi_buffer;					/* pointer to allocated buffer data */
@@ -88,6 +97,13 @@ typedef struct nd_mem_chunk {
 	void *prev_mem_p;
 	/* variable size data */
 } nd_mem_chunk_t;
+
+struct lladdr_info {
+	const char *(*addr_string)(netdissect_options *, const char *);
+	const char *addr;
+};
+
+extern void ether_if_print IF_PRINTER_ARGS;
 
 /* Initialize netdissect. */
 int nd_init(char *, size_t);
