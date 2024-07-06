@@ -50,19 +50,6 @@
 #define NORETURN __attribute((noreturn))
 #define ND_TRUNCATED 1
 
-#define EXTRACT_U_1(p)	((uint8_t)(*(p)))
-
-#define ND_BYTES_BETWEEN(p1, p2) ((const char *)(p1) >= (const char *)(p2) ? 0 : ((int)(((const char *)(p2)) - (const char *)(p1))))
-
-#define ND_BYTES_AVAILABLE_AFTER(p) ((const u_char *)(p) < ndo->ndo_packetp ? 0 : ND_BYTES_BETWEEN((p), ndo->ndo_snapend))
-
-#define GET_U_1(p) get_u_1(ndo, (const char *)(p))
-static inline uint8_t
-get_u_1(netdissect_options *ndo, const char *p)
-{
-	return EXTRACT_U_1(p);
-}
-
 #define IF_PRINTER_ARGS (netdissect_options *, const struct pcap_pkthdr *, const char *)
 
 typedef void (*if_printer) IF_PRINTER_ARGS;

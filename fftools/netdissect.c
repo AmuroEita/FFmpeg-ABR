@@ -49,3 +49,15 @@ nd_pop_all_packet_info(netdissect_options *ndo)
 	while (ndo->ndo_packet_info_stack != NULL)
 		nd_pop_packet_info(ndo);
 }
+
+static inline uint16_t
+EXTRACT_BE_U_2(const void *p)
+{
+	return ((uint16_t)ntohs(*(const uint16_t *)(p)));
+}
+
+static inline uint16_t
+get_be_u_2(netdissect_options *ndo, const char *p)
+{
+	return EXTRACT_BE_U_2(p);
+}

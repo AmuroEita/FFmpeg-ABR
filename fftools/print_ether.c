@@ -2,7 +2,7 @@
 
 #define ETHER_HDRLEN 14
 #define BUFSIZE 128
-#define TOKBUFSIZE 128
+
 #define	MAX_ETHERNET_LENGTH_VAL	1500
 #define HASHNAMESIZE 4096
 
@@ -12,8 +12,6 @@
 #define	ETHERTYPE_ARISTA    0xd28b 
 
 #define GET_MAC48_STRING(p) get_mac48_string(ndo, (const char *)(p))
-
-#define GET_BE_U_2(p) get_be_u_2(ndo, (const char *)(p))
 
 #define IS_NOT_NEGATIVE(x) (((x) > 0) || ((x) == 0))
 
@@ -55,48 +53,12 @@ const struct tok oui_values[] = {
     { 0, NULL }
 };
 
-static inline uint16_t
-EXTRACT_BE_U_2(const void *p)
-{
-	return ((uint16_t)ntohs(*(const uint16_t *)(p)));
-}
-
 static inline char *
 octet_to_hex(char *cp, uint8_t octet)
 {
 	*cp++ = hex[(octet >> 4) & 0xf];
 	*cp++ = hex[(octet >> 0) & 0xf];
 	return (cp);
-}
-
-static const char *
-tok2strbuf(const struct tok *lp, const char *fmt,
-	   const int v, char *buf, const size_t bufsize)
-{
-	if (lp != NULL) {
-		while (lp->s != NULL) {
-			if (lp->v == v)
-				return (lp->s);
-			++lp;
-		}
-	}
-	if (fmt == NULL)
-		fmt = "#%d";
-
-	(void)snprintf(buf, bufsize, fmt, v);
-	return (const char *)buf;
-}
-
-const char *
-tok2str(const struct tok *lp, const char *fmt, const int v)
-{
-	static char buf[4][TOKBUFSIZE];
-	static int idx = 0;
-	char *ret;
-
-	ret = buf[idx];
-	idx = (idx+1) & 3;
-	return tok2strbuf(lp, fmt, v, ret, sizeof(buf[0]));
 }
 
 static void
@@ -170,12 +132,6 @@ void
 nd_trunc_longjmp(netdissect_options *ndo)
 {
 	longjmp(ndo->ndo_early_end, 1);
-}
-
-static inline uint16_t
-get_be_u_2(netdissect_options *ndo, const char *p)
-{
-	return EXTRACT_BE_U_2(p);
 }
 
 static inline const char *

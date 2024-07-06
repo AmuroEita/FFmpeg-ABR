@@ -21,19 +21,12 @@ static void
 hex_and_ascii_print_with_offset(netdissect_options *ndo, const char *indent,
 				const char *cp, int length, int offset)
 {
-	int caplength;
 	int i;
 	int s1, s2;
 	int nshorts;
-	int truncated = 0;
 	char hexstuff[HEXDUMP_SHORTS_PER_LINE*HEXDUMP_HEXSTUFF_PER_SHORT+1], *hsp;
 	char asciistuff[ASCII_LINELENGTH+1], *asp;
 
-	caplength = ND_BYTES_AVAILABLE_AFTER(cp);
-	if (length > caplength) {
-		length = caplength;
-		truncated = TRUE;
-	}
 	nshorts = length / sizeof(short);
 	i = 0;
 	hsp = hexstuff; asp = asciistuff;
@@ -156,16 +149,9 @@ void
 ascii_print(netdissect_options *ndo,
             const char *cp, int length)
 {
-	int caplength;
 	char s;
-	int truncated = FALSE;
 
 	ndo->ndo_protocol = "ascii";
-	caplength = ND_BYTES_AVAILABLE_AFTER(cp);
-	if (length > caplength) {
-		length = caplength;
-		truncated = TRUE;
-	}
 	ND_PRINT("\n");
 	while (length != 0) {
 		s = GET_U_1(cp);

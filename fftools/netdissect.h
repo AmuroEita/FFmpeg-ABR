@@ -1,7 +1,6 @@
 #ifndef netdissect_h
 #define netdissect_h
 #endif
-// 
 
 #include <setjmp.h>
 #include <pcap.h>
@@ -33,7 +32,7 @@ typedef unsigned char nd_uint16_t[2];
 	((uint32_t)(((uint32_t)(*((const uint8_t *)(p) + 0)) << 16) | \
 	            ((uint32_t)(*((const uint8_t *)(p) + 1)) << 8) | \
 	            ((uint32_t)(*((const uint8_t *)(p) + 2)) << 0)))
-                
+
 struct netdissect_saved_packet_info {
     char *ndspi_buffer;					/* pointer to allocated buffer data */
     const char *ndspi_packetp;				/* saved beginning of data */
@@ -98,6 +97,16 @@ struct netdissect_options {
 		     PRINTFLIKE_FUNCPTR(2, 3);
 };
 
+#define EXTRACT_U_1(p)	((uint8_t)(*(p)))
+
+#define GET_U_1(p) get_u_1(ndo, (const char *)(p))
+
+static inline uint8_t
+get_u_1(netdissect_options *ndo, const char *p)
+{
+	return EXTRACT_U_1(p);
+}
+
 typedef struct nd_mem_chunk {
 	void *prev_mem_p;
 	/* variable size data */
@@ -110,12 +119,24 @@ struct lladdr_info {
 
 #define OUI_ENCAP_ETHER 0x000000  /* encapsulated Ethernet */
 
-struct tok {
-	int v;		/* value */
-	const char *s;		/* string */
-};
-
 #define ETHERTYPE_MACSEC	0x88e5
+
+#define GET_BE_U_2(p) get_be_u_2(ndo, (const char *)(p))
+
+#define ND_ICHECKMSG_U(message, expression_1, operator, expression_2) \
+if ((expression_1) operator (expression_2)) { \
+ND_PRINT(" [%s %u %s %u]", (message), (expression_1), (#operator), (expression_2)); \
+goto invalid; \
+}
+
+#define ND_ICHECKMSG_ZU(message, expression_1, operator, expression_2) \
+if ((expression_1) operator (expression_2)) { \
+ND_PRINT(" [%s %u %s %zu]", (message), (expression_1), (#operator), (expression_2)); \
+goto invalid; \
+}
+
+#define ND_ICHECK_ZU(expression_1, operator, expression_2) \
+ND_ICHECKMSG_ZU((#expression_1), (expression_1), operator, (expression_2))
 
 extern void ether_if_print IF_PRINTER_ARGS;
 
