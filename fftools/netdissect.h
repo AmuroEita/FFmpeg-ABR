@@ -29,6 +29,11 @@ typedef unsigned char nd_mac48[MAC48_LEN];
 
 typedef unsigned char nd_uint16_t[2];
 
+#define EXTRACT_BE_U_3(p) \
+	((uint32_t)(((uint32_t)(*((const uint8_t *)(p) + 0)) << 16) | \
+	            ((uint32_t)(*((const uint8_t *)(p) + 1)) << 8) | \
+	            ((uint32_t)(*((const uint8_t *)(p) + 2)) << 0)))
+                
 struct netdissect_saved_packet_info {
     char *ndspi_buffer;					/* pointer to allocated buffer data */
     const char *ndspi_packetp;				/* saved beginning of data */
@@ -102,6 +107,15 @@ struct lladdr_info {
 	const char *(*addr_string)(netdissect_options *, const char *);
 	const char *addr;
 };
+
+#define OUI_ENCAP_ETHER 0x000000  /* encapsulated Ethernet */
+
+struct tok {
+	int v;		/* value */
+	const char *s;		/* string */
+};
+
+#define ETHERTYPE_MACSEC	0x88e5
 
 extern void ether_if_print IF_PRINTER_ARGS;
 

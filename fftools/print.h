@@ -52,7 +52,7 @@
 
 #define EXTRACT_U_1(p)	((uint8_t)(*(p)))
 
-#define ND_BYTES_BETWEEN(p1, p2) ((const char *)(p1) >= (const char *)(p2) ? 0 : ((u_int)(((const char *)(p2)) - (const char *)(p1))))
+#define ND_BYTES_BETWEEN(p1, p2) ((const char *)(p1) >= (const char *)(p2) ? 0 : ((int)(((const char *)(p2)) - (const char *)(p1))))
 
 #define ND_BYTES_AVAILABLE_AFTER(p) ((const u_char *)(p) < ndo->ndo_packetp ? 0 : ND_BYTES_BETWEEN((p), ndo->ndo_snapend))
 
