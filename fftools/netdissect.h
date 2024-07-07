@@ -121,6 +121,18 @@ struct lladdr_info {
 
 #define ETHERTYPE_MACSEC	0x88e5
 
+static inline uint16_t
+EXTRACT_BE_U_2(const void *p)
+{
+	return ((uint16_t)ntohs(*(const uint16_t *)(p)));
+}
+
+static inline uint16_t
+get_be_u_2(netdissect_options *ndo, const char *p)
+{
+	return EXTRACT_BE_U_2(p);
+}
+
 #define GET_BE_U_2(p) get_be_u_2(ndo, (const char *)(p))
 
 #define ND_ICHECKMSG_U(message, expression_1, operator, expression_2) \
@@ -146,3 +158,7 @@ int nd_init(char *, size_t);
 void nd_free_all(netdissect_options *);
 
 void nd_pop_all_packet_info(netdissect_options *);
+
+int nd_push_snaplen(netdissect_options *, const char *, const int);
+
+const char *ipaddr_string(netdissect_options *, const char *);

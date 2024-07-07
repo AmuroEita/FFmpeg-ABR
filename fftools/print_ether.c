@@ -1,4 +1,5 @@
 #include "netdissect.h"
+#include "utils.h"
 
 #define ETHER_HDRLEN 14
 #define BUFSIZE 128

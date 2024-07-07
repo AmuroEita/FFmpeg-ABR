@@ -1,1 +1,1 @@
-sudo gcc utils.c netdissect.c print.c print_ether.c dumper.c -lpcap -o dumper && sudo setcap cap_net_raw+eip dumper
+sudo gcc utils.c netdissect.c print.c print_ether.c print_ip.c dumper.c -lpcap -o dumper && sudo setcap cap_net_raw+eip dumper

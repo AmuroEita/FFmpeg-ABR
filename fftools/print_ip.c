@@ -43,6 +43,14 @@ struct cksum_vec {
 
 #define IP_RES 0x8000
 
+static inline const char *
+get_ipaddr_string(netdissect_options *ndo, const char *p)
+{
+        return ipaddr_string(ndo, p);
+}
+
+#define GET_IPADDR_STRING(p) get_ipaddr_string(ndo, (const u_char *)(p))
+
 static const struct tok ip_frag_values[] = {
     { IP_MF,        "+" },
     { IP_DF,        "DF" },
@@ -128,38 +136,11 @@ ip_print(netdissect_options *ndo,
                          tok2str(ipproto_values, "unknown", ip_proto),
                          ip_proto);
 
-	    if (presumed_tso)
-                ND_PRINT(", length %u [was 0, presumed TSO]", length);
-	    else
-                ND_PRINT(", length %u", GET_BE_U_2(ip->ip_len));
-
-            if ((hlen - sizeof(struct ip)) > 0) {
-                ND_PRINT(", options (");
-                if (ip_optprint(ndo, (const char *)(ip + 1),
-                    hlen - sizeof(struct ip)) == -1) {
-                        ND_PRINT(" [truncated-option]");
-			truncated = 1;
-                }
-                ND_PRINT(")");
-            }
-
-	    if (!ndo->ndo_Kflag && (const char *)ip + hlen <= ndo->ndo_snapend) {
-	        vec[0].ptr = (const uint8_t *)(const void *)ip;
-	        vec[0].len = hlen;
-	        sum = in_cksum(vec, 1);
-		if (sum != 0) {
-		    ip_sum = GET_BE_U_2(ip->ip_sum);
-		    ND_PRINT(", bad cksum %x (->%x)!", ip_sum,
-			     in_cksum_shouldbe(ip_sum, sum));
-		}
-	    }
-
 	    ND_PRINT(")\n    ");
 	    if (truncated) {
 		ND_PRINT("%s > %s: ",
 			 GET_IPADDR_STRING(ip->ip_src),
 			 GET_IPADDR_STRING(ip->ip_dst));
-		nd_print_trunc(ndo);
 		nd_pop_packet_info(ndo);
 		return;
 	    }
@@ -179,18 +160,9 @@ ip_print(netdissect_options *ndo,
 				     GET_IPADDR_STRING(ip->ip_src),
 				     GET_IPADDR_STRING(ip->ip_dst));
 		}
-		/*
-		 * Do a bounds check before calling ip_demux_print().
-		 * At least the header data is required.
-		 */
-		// if (!ND_TTEST_LEN((const char *)ip, hlen)) {
-		// 	ND_PRINT(" [remaining caplen(%u) < header length(%u)]",
-		// 		 ND_BYTES_AVAILABLE_AFTER((const char *)ip),
-		// 		 hlen);
-		// 	nd_trunc_longjmp(ndo);
-		// }
-		ip_demux_print(ndo, (const char *)ip + hlen, len, 4,
-			       off & IP_MF, GET_U_1(ip->ip_ttl), nh, bp);
+
+		// ip_demux_print(ndo, (const char *)ip + hlen, len, 4,
+		// 	       off & IP_MF, GET_U_1(ip->ip_ttl), nh, bp);
 	} else {
 		/*
 		 * Ultra quiet now means that all this stuff should be
