@@ -4,16 +4,6 @@
 #include "netdissect.h"
 #include "utils.h"
 
-#define HASHNAMESIZE 4096
-
-struct hnamemem {
-	uint32_t addr;
-	const char *name;
-	struct hnamemem *nxt;
-};
-
-static struct hnamemem hnametable[HASHNAMESIZE];
-
 int
 nd_init(char *errbuf, size_t errbuf_size)
 {
@@ -121,6 +111,36 @@ newhnamemem(netdissect_options *ndo)
 }
 
 const char *
+intoa(uint32_t addr)
+{
+	char *cp;
+	int byte;
+	int n;
+	static char buf[sizeof(".xxx.xxx.xxx.xxx")];
+
+	addr = ntohl(addr);
+	cp = buf + sizeof(buf);
+	*--cp = '\0';
+
+	n = 4;
+	do {
+		byte = addr & 0xff;
+		*--cp = (char)(byte % 10) + '0';
+		byte /= 10;
+		if (byte > 0) {
+			*--cp = (char)(byte % 10) + '0';
+			byte /= 10;
+			if (byte > 0)
+				*--cp = (char)byte + '0';
+		}
+		*--cp = '.';
+		addr >>= 8;
+	} while (--n > 0);
+
+	return cp + 1;
+}
+
+const char *
 ipaddr_string(netdissect_options *ndo, const char *ap)
 {
 	struct hostent *hp;
@@ -138,4 +158,10 @@ ipaddr_string(netdissect_options *ndo, const char *ap)
 
 	p->name = strdup(intoa(addr));
 	return (p->name);
+}
+
+void
+nd_trunc_longjmp(netdissect_options *ndo)
+{
+	longjmp(ndo->ndo_early_end, 1);
 }

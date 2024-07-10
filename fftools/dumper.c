@@ -35,25 +35,11 @@
 static int packets_captured;
 static pcap_t *pd;
 
-static void 
-test (char *user, const struct pcap_pkthdr *h, const char *sp)
-{
-	static int count = 1;
-    fprintf(stdout,"%d, ",count);
-    fflush(stdout);
-    count++;
-}
-
 static void
 print_packet(char *user, const struct pcap_pkthdr *h, const char *sp)
 {
 	++packets_captured;
 	pretty_print_packet((netdissect_options *)user, h, sp, packets_captured);
-}
-
-void dumper()
-{
-    
 }
 
 static char *
@@ -152,8 +138,9 @@ int main()
 
 	pd = pcap_open_live(device, BUFSIZ, 0, -1, ebuf);
 
-	filter_exp = "tcp dst port 80 and tcp[((tcp[12:1] & 0xf0) >> 2):4] = 0x47455420";
+	// filter_exp = "tcp dst port 80 and tcp[((tcp[12:1] & 0xf0) >> 2):4] = 0x47455420";
 	// filter_exp = "tcp port 80 and (((ip[2:2] - ((ip[0]&0xf)<<2)) - ((tcp[12]&0xf0)>>2)) != 0)";
+	filter_exp = "tcp port 80 and dst host 10.120.16.220";
 
 	if (pcap_compile(pd, &fcode, filter_exp, 1, netmask) < 0)
 		error("%s", pcap_geterr(pd));
@@ -184,4 +171,6 @@ int main()
 
 	free(filter_exp);
 	pcap_freecode(&fcode);
+
+	return 0;
 }

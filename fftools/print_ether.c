@@ -14,8 +14,6 @@
 
 #define GET_MAC48_STRING(p) get_mac48_string(ndo, (const char *)(p))
 
-#define IS_NOT_NEGATIVE(x) (((x) > 0) || ((x) == 0))
-
 #define ND_TTEST_LEN(p, l) \
   (IS_NOT_NEGATIVE(l) && \
 	((uintptr_t)ndo->ndo_snapend - (l) <= (uintptr_t)ndo->ndo_snapend && \
@@ -129,12 +127,6 @@ mac48_string(netdissect_options *ndo, const uint8_t *ep)
 	return (tp->e_name);
 }
 
-void
-nd_trunc_longjmp(netdissect_options *ndo)
-{
-	longjmp(ndo->ndo_early_end, 1);
-}
-
 static inline const char *
 get_mac48_string(netdissect_options *ndo, const uint8_t *p)
 {
@@ -161,7 +153,7 @@ ethertype_print(netdissect_options *ndo,
 
 	case ETHERTYPE_IP:
 		// printf("\n\nETHER PRINT ----  %s  ---- \n\n", p);
-		// ip_print(ndo, p, length);
+		ip_print(ndo, p, length);
 		return (1);
 
 	case ETHERTYPE_IPV6:
@@ -257,6 +249,7 @@ recurse:
 			else
 				ND_PRINT(", ");
 		}
+
 		if (ethertype_print(ndo, length_type, p, length, caplen, &src, &dst) == 0) {
 			/* type not known, print raw packet */
 			if (!ndo->ndo_eflag) {

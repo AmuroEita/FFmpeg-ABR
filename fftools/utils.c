@@ -403,3 +403,13 @@ netdb_protoname (const uint8_t protoid)
 {
 	return netdb_protocol_names[protoid];
 }
+
+/*
+ * Convert a bit token value to a string; use "fmt" if not found.
+ * this is useful for parsing bitfields, the output strings are not separated.
+ */
+char *
+bittok2str_nosep(const struct tok *lp, const char *fmt, const int v)
+{
+    return (bittok2str_internal(lp, fmt, v, ""));
+}

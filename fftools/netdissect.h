@@ -19,19 +19,26 @@ typedef void (*if_printer) IF_PRINTER_ARGS;
 
 #define ND_BYTES_BETWEEN(p1, p2) ((const char *)(p1) >= (const char *)(p2) ? 0 : ((int)(((const char *)(p2)) - (const char *)(p1))))
 
-#define ND_BYTES_AVAILABLE_AFTER(p) ((const u_char *)(p) < ndo->ndo_packetp ? 0 : ND_BYTES_BETWEEN((p), ndo->ndo_snapend))
+#define ND_BYTES_AVAILABLE_AFTER(p) ((const char *)(p) < ndo->ndo_packetp ? 0 : ND_BYTES_BETWEEN((p), ndo->ndo_snapend))
 
 #define ND_PRINT(...) (ndo->ndo_printf)(ndo, __VA_ARGS__)
 
 #define MAC48_LEN	6U		/* length of MAC addresses */
 typedef unsigned char nd_mac48[MAC48_LEN];
 
-typedef unsigned char nd_uint16_t[2];
+#define UNALIGNED_MEMCPY(p, q, l)	memcpy((p), (q), (l))
+#define UNALIGNED_MEMCMP(p, q, l)	memcmp((p), (q), (l))
 
 #define EXTRACT_BE_U_3(p) \
 	((uint32_t)(((uint32_t)(*((const uint8_t *)(p) + 0)) << 16) | \
 	            ((uint32_t)(*((const uint8_t *)(p) + 1)) << 8) | \
 	            ((uint32_t)(*((const uint8_t *)(p) + 2)) << 0)))
+
+typedef unsigned char nd_uint8_t[1];
+typedef unsigned char nd_uint16_t[2];
+typedef unsigned char nd_uint32_t[4];
+
+typedef unsigned char nd_ipv6[16];
 
 struct netdissect_saved_packet_info {
     char *ndspi_buffer;					/* pointer to allocated buffer data */
@@ -135,6 +142,20 @@ get_be_u_2(netdissect_options *ndo, const char *p)
 
 #define GET_BE_U_2(p) get_be_u_2(ndo, (const char *)(p))
 
+static inline uint32_t
+EXTRACT_BE_U_4(const void *p)
+{
+	return ((uint32_t)ntohl(*(const uint32_t *)(p)));
+}
+
+static inline uint32_t
+get_be_u_4(netdissect_options *ndo, const char *p)
+{
+	return EXTRACT_BE_U_4(p);
+}
+
+#define GET_BE_U_4(p) get_be_u_4(ndo, (const char *)(p))
+
 #define ND_ICHECKMSG_U(message, expression_1, operator, expression_2) \
 if ((expression_1) operator (expression_2)) { \
 ND_PRINT(" [%s %u %s %u]", (message), (expression_1), (#operator), (expression_2)); \
@@ -162,3 +183,52 @@ void nd_pop_all_packet_info(netdissect_options *);
 int nd_push_snaplen(netdissect_options *, const char *, const int);
 
 const char *ipaddr_string(netdissect_options *, const char *);
+
+static inline const char *
+get_ipaddr_string(netdissect_options *ndo, const char *p)
+{
+        return ipaddr_string(ndo, p);
+}
+
+#define GET_IPADDR_STRING(p) get_ipaddr_string(ndo, (const char *)(p))
+
+const char *ip6addr_string(netdissect_options *, const char *);
+
+static inline const char *
+get_ip6addr_string(netdissect_options *ndo, const char *p)
+{
+        return ip6addr_string(ndo, p);
+}
+
+#define GET_IP6ADDR_STRING(p) get_ip6addr_string(ndo, (const char *)(p))
+
+#define ND_TTEST_LEN(p, l) \
+  (IS_NOT_NEGATIVE(l) && \
+	((uintptr_t)ndo->ndo_snapend - (l) <= (uintptr_t)ndo->ndo_snapend && \
+         (uintptr_t)(p) <= (uintptr_t)ndo->ndo_snapend - (l)))
+
+#define ND_TTEST_2(p) ND_TTEST_LEN((p), 2)
+
+#define HASHNAMESIZE 4096
+
+struct hnamemem {
+	uint32_t addr;
+	const char *name;
+	struct hnamemem *nxt;
+};
+
+static struct hnamemem hnametable[HASHNAMESIZE];
+
+struct h6namemem {
+	nd_ipv6 addr;
+	char *name;
+	struct h6namemem *nxt;
+};
+
+static struct h6namemem h6nametable[HASHNAMESIZE];
+
+#define IS_NOT_NEGATIVE(x) (((x) > 0) || ((x) == 0))
+
+void nd_trunc_longjmp(netdissect_options *);
+
+#define ND_TCHECK_LEN(p, l) if (!ND_TTEST_LEN(p, l)) nd_trunc_longjmp(ndo)

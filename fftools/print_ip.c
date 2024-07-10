@@ -57,6 +57,49 @@ static const struct tok ip_frag_values[] = {
     { IP_RES,       "rsvd" }, /* The RFC3514 evil ;-) bit */
     { 0,            NULL }
 };
+
+void
+ip_demux_print(netdissect_options *ndo,
+	       const char *bp,
+	       int length, u_int ver, int fragmented, int ttl_hl,
+	       uint8_t nh, const char *iph)
+{
+	int advance;
+	const char *p_name;
+
+	advance = 0;
+
+again:
+	switch (nh) {
+
+	case IPPROTO_TCP:
+		tcp_print(ndo, bp, length, iph, fragmented);
+		break;
+
+	case IPPROTO_ETHERNET:
+		if (ver == 6)
+			ether_print(ndo, bp, length, ND_BYTES_AVAILABLE_AFTER(bp), NULL, NULL);
+		else {
+			ND_PRINT("[%s requires IPv6]",
+				 tok2str(ipproto_values,"unknown",nh));
+			nd_print_invalid(ndo);
+		}
+		break;
+
+	case IPPROTO_NONE:
+		ND_PRINT("no next header");
+		break;
+
+	default:
+		if (ndo->ndo_nflag==0 && (p_name = netdb_protoname(nh)) != NULL)
+			ND_PRINT(" %s", p_name);
+		else
+			ND_PRINT(" ip-proto-%u", nh);
+		ND_PRINT(" %u", length);
+		break;
+	}
+}
+
 /*
  * print an IP datagram.
  */
@@ -161,8 +204,8 @@ ip_print(netdissect_options *ndo,
 				     GET_IPADDR_STRING(ip->ip_dst));
 		}
 
-		// ip_demux_print(ndo, (const char *)ip + hlen, len, 4,
-		// 	       off & IP_MF, GET_U_1(ip->ip_ttl), nh, bp);
+		ip_demux_print(ndo, (const char *)ip + hlen, len, 4,
+			       off & IP_MF, GET_U_1(ip->ip_ttl), nh, bp);
 	} else {
 		/*
 		 * Ultra quiet now means that all this stuff should be
