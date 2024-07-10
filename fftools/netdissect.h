@@ -209,6 +209,13 @@ get_ip6addr_string(netdissect_options *ndo, const char *p)
 
 #define ND_TTEST_2(p) ND_TTEST_LEN((p), 2)
 
+/* True if "*(p)" was captured */
+#define ND_TTEST_SIZE(p) ND_TTEST_LEN(p, sizeof(*(p)))
+
+#define ND_TCHECK_LEN(p, l) if (!ND_TTEST_LEN(p, l)) goto trunc
+
+#define ND_TCHECK_SIZE(p) ND_TCHECK_LEN(p, sizeof(*(p)))
+
 #define HASHNAMESIZE 4096
 
 struct hnamemem {

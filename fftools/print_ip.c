@@ -43,14 +43,6 @@ struct cksum_vec {
 
 #define IP_RES 0x8000
 
-static inline const char *
-get_ipaddr_string(netdissect_options *ndo, const char *p)
-{
-        return ipaddr_string(ndo, p);
-}
-
-#define GET_IPADDR_STRING(p) get_ipaddr_string(ndo, (const u_char *)(p))
-
 static const struct tok ip_frag_values[] = {
     { IP_MF,        "+" },
     { IP_DF,        "DF" },
@@ -61,7 +53,7 @@ static const struct tok ip_frag_values[] = {
 void
 ip_demux_print(netdissect_options *ndo,
 	       const char *bp,
-	       int length, u_int ver, int fragmented, int ttl_hl,
+	       int length, int ver, int fragmented, int ttl_hl,
 	       uint8_t nh, const char *iph)
 {
 	int advance;
@@ -82,7 +74,7 @@ again:
 		else {
 			ND_PRINT("[%s requires IPv6]",
 				 tok2str(ipproto_values,"unknown",nh));
-			nd_print_invalid(ndo);
+			ND_PRINT("[invalid]");
 		}
 		break;
 
@@ -232,9 +224,8 @@ ip_print(netdissect_options *ndo,
 	return;
 
 trunc:
-	nd_print_trunc(ndo);
 	return;
 
 invalid:
-	nd_print_invalid(ndo);
+	ND_PRINT("[invalid]");
 }
