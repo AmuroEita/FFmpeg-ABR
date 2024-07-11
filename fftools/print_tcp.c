@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "tcp.h"
 #include "utils.h"

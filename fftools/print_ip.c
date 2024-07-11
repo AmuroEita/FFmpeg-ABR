@@ -95,7 +95,7 @@ again:
 /*
  * print an IP datagram.
  */
-void
+static void
 ip_print(netdissect_options *ndo,
 	 const char *bp,
 	 const int length)

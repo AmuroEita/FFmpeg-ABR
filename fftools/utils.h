@@ -24,4 +24,10 @@ const char *netdb_protoname (const uint8_t);
 
 char *bittok2str_nosep(const struct tok *, const char *, const int);
 
+const char *addrtostr6(const void *src, char *dst, size_t size);
+
+const char *addrtostr (const void *src, char *dst, size_t size);
+
+
+
 #endif

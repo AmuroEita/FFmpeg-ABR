@@ -56,6 +56,7 @@
 #include "libavutil/opt.h"
 #include "libavcodec/avfft.h"
 #include "libswresample/swresample.h"
+#include "libavutil/thread.h"
 
 #if CONFIG_AVFILTER
 #include "libavfilter/avfilter.h"
@@ -4232,7 +4233,7 @@ int validate_number(char *str)
 {
     while (*str) {
         if (!isdigit(*str)) { 
-            false return 0;
+            return 0;
         }
         str++; 
     }
@@ -4252,7 +4253,7 @@ int validate_ip(char *ip)
     while (ptr) {
         // check whether the sub string is
         if (!validate_number(ptr)) 
-            holding only number or not return 0;
+            return 0;
         num = atoi(ptr); 
         if (num >= 0 && num <= 255) {
             ptr = strtok(NULL, "."); 
@@ -4292,7 +4293,7 @@ static void *dumper_thread_worker(void *arg)
 	netdissect_options *ndo = &Ndo;
 
 	if (nd_init(ebuf, sizeof(ebuf)) == -1)
-		error("%s", ebuf);
+		av_log(NULL, AV_LOG_ERROR, "nd init failed: %s.", ebuf);
 
 	memset(ndo, 0, sizeof(*ndo));
 	ndo_set_function_pointers(ndo);
@@ -4310,10 +4311,10 @@ static void *dumper_thread_worker(void *arg)
 	filter_exp = "tcp port 80 and dst host 10.120.16.220";
 
 	if (pcap_compile(pd, &fcode, filter_exp, 1, netmask) < 0)
-		error("%s", pcap_geterr(pd));
+		av_log(NULL, AV_LOG_ERROR, "pcap compile failed: %s.", pcap_geterr(pd));
 
 	if (pcap_setfilter(pd, &fcode) < 0)
-		error("%s", pcap_geterr(pd));
+        av_log(NULL, AV_LOG_ERROR, "pcap setfilter failed: %s.", pcap_geterr(pd));
 
 	dlt = pcap_datalink(pd);
 	ndo->ndo_if_printer = get_if_printer(dlt);
@@ -4338,10 +4339,14 @@ static void *dumper_thread_worker(void *arg)
 
 	free(filter_exp);
 	pcap_freecode(&fcode);
+
+    return NULL;
 }
 
 static int init_dumper_thread()
 {
+    int ret = 0;
+
     if (!abr || dst_host == NULL)
         return 0;
 

@@ -239,3 +239,6 @@ static struct h6namemem h6nametable[HASHNAMESIZE];
 void nd_trunc_longjmp(netdissect_options *);
 
 #define ND_TCHECK_LEN(p, l) if (!ND_TTEST_LEN(p, l)) nd_trunc_longjmp(ndo)
+
+void nd_pop_packet_info(netdissect_options *ndo);
+

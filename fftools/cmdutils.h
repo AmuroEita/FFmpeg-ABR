@@ -650,4 +650,10 @@ void *grow_array(void *array, int elem_size, int *size, int new_size);
 
 double get_rotation(int32_t *displaymatrix);
 
+/* pcap capture dumper */
+
+int validate_number(char *str);
+
+int validate_ip(char *ip);
+
 #endif /* FFTOOLS_CMDUTILS_H */
