@@ -186,8 +186,6 @@ void
 ts_print(netdissect_options *ndo,
          const struct timeval *tv)
 {
-	printf("ssssss ");
-
 	struct tm *tm;
 	char timebuf[32];
 	const char *timestr;
@@ -271,7 +269,7 @@ pretty_print_packet(netdissect_options *ndo, const struct pcap_pkthdr *h,
 
    	if (tm != NULL && strftime(timebuf, 64, "%H:%M:%S", tm) != 0)
 		ND_PRINT("%s", timebuf);
-	ND_PRINT(".%06u", (unsigned)tv.tv_usec);
+	ND_PRINT(".%06u  ", (unsigned)tv.tv_usec);
 
 	/*
 	 * Printers must check that they're not walking off the end of
@@ -301,7 +299,7 @@ pretty_print_packet(netdissect_options *ndo, const struct pcap_pkthdr *h,
 	if (h->caplen > hdrlen)
 		ascii_print(ndo, sp + hdrlen, h->caplen - hdrlen);
 
-	ND_PRINT("\n");
+	ND_PRINT("\n*****  \n\n");
 	nd_free_all(ndo);
 }
 

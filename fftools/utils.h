@@ -3,6 +3,12 @@
 
 #include <stddef.h>
 
+#define IN6ADDRSZ   16 
+
+#define INT16SZ     2  
+
+#define INET_ADDRSTRLEN 16
+
 struct tok {
 	int v;		/* value */
 	const char *s;		/* string */

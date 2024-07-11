@@ -421,6 +421,39 @@ bittok2str_nosep(const struct tok *lp, const char *fmt, const int v)
 	return (bittok2str_internal(lp, fmt, v, ""));
 }
 
+const char *
+addrtostr (const void *src, char *dst, size_t size)
+{
+    const char *srcaddr = (const char *)src;
+    const char digits[] = "0123456789";
+    int i;
+    const char *orig_dst = dst;
+
+    if (size < INET_ADDRSTRLEN) {
+		return NULL;
+    }
+    for (i = 0; i < 4; ++i) {
+	int n = *srcaddr++;
+	int non_zerop = 0;
+
+	if (non_zerop || n / 100 > 0) {
+	    *dst++ = digits[n / 100];
+	    n %= 100;
+	    non_zerop = 1;
+	}
+	if (non_zerop || n / 10 > 0) {
+	    *dst++ = digits[n / 10];
+	    n %= 10;
+	    non_zerop = 1;
+	}
+	*dst++ = digits[n];
+	if (i != 3)
+	    *dst++ = '.';
+    }
+    *dst++ = '\0';
+    return orig_dst;
+}
+
 /*
  * Convert IPv6 binary address into presentation (printable) format.
  */
@@ -434,7 +467,7 @@ addrtostr6(const void *src, char *dst, size_t size)
 	 * Keep this in mind if you think this function should have been coded
 	 * to use pointer overlays.  All the world's not a VAX.
 	 */
-	const u_char *srcaddr = (const u_char *)src;
+	const char *srcaddr = (const char *)src;
 	char *dp;
 	size_t space_left, added_space;
 	int snprintfed;
@@ -486,7 +519,6 @@ addrtostr6(const void *src, char *dst, size_t size)
 	{                        \
 		if (space_left == 0) \
 		{                    \
-			errno = ENOSPC;  \
 			return (NULL);   \
 		}                    \
 		*dp++ = c;           \
@@ -515,7 +547,6 @@ addrtostr6(const void *src, char *dst, size_t size)
 		{
 			if (!addrtostr(srcaddr + 12, dp, space_left))
 			{
-				errno = ENOSPC;
 				return (NULL);
 			}
 			added_space = strlen(dp);
@@ -528,7 +559,6 @@ addrtostr6(const void *src, char *dst, size_t size)
 			return (NULL);
 		if ((size_t)snprintfed >= space_left)
 		{
-			errno = ENOSPC;
 			return (NULL);
 		}
 		dp += snprintfed;

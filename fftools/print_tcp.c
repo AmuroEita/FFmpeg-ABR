@@ -878,6 +878,8 @@ tcp_print(netdissect_options *ndo,
                 // http_print(ndo, bp, length);
         } 
 
+        ND_PRINT("\n\n");
+
         return;
 bad:
         ND_PRINT("[bad opt]");
