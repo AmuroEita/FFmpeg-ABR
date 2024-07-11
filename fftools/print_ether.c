@@ -152,7 +152,6 @@ ethertype_print(netdissect_options *ndo,
 	switch (ether_type) {
 
 	case ETHERTYPE_IP:
-		// printf("\n\nETHER PRINT ----  %s  ---- \n\n", p);
 		ip_print(ndo, p, length);
 		return (1);
 

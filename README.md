@@ -47,7 +47,3 @@ sh build.sh
 ```sh
 ./ffplay -abr -abr-params format=dash ffabr:$(dash source url)
 ```
-
-```
-sudo setcap cap_net_raw+eip parser
-```
