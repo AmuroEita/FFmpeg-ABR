@@ -422,6 +422,8 @@ static SDL_AudioDeviceID audio_dev;
 
 pthread_t dumper_thread;
 
+FILE *stat_fp = NULL;
+
 static const struct TextureFormatEntry
 {
     enum AVPixelFormat format;
@@ -4270,8 +4272,6 @@ int validate_ip(char *ip)
     return 1;
 }
 
-// extern void pretty_print_packet(netdissect_options *ndo, const struct pcap_pkthdr *h, const char *sp, int packets_captured);
-
 static void
 print_packet(char *user, const struct pcap_pkthdr *h, const char *sp)
 {
@@ -4283,15 +4283,21 @@ static void *dumper_thread_worker(void *arg)
 {
     int cnt, op, i;
 	bpf_u_int32 localnet = 0, netmask = 0;
-	char *cp, *infile, *filter_exp, *device;
+	char *cp, *infile, *device;
 	char *endp;
 	pcap_handler callback;
 	int dlt;
 	const char *dlt_name;
 	struct bpf_program fcode;
+    time_t ltime;
+    char timestr[32];
 
 	char *pcap_userdata;
 	char ebuf[PCAP_ERRBUF_SIZE];
+
+    char filter_exp[64] = "tcp port 80 and dst host ";
+
+    char stat_file_name[64] = "stat";
 
 	netdissect_options Ndo;
 	netdissect_options *ndo = &Ndo;
@@ -4308,11 +4314,13 @@ static void *dumper_thread_worker(void *arg)
 
 	ndo->ndo_snaplen = 0;
 
-	device = "wlp0s20f3";
+    device = pcap_lookupdev(ebuf);
+    if (device == NULL) 
+        av_log(NULL, AV_LOG_ERROR, "pcap lookupdev failed: %s.", ebuf);
 
 	pd = pcap_open_live(device, BUFSIZ, 0, -1, ebuf);
 
-	filter_exp = "tcp port 80 and dst host 10.120.16.220";
+    strncpy(filter_exp, dst_host, strlen(dst_host));
 
 	if (pcap_compile(pd, &fcode, filter_exp, 1, netmask) < 0)
 		av_log(NULL, AV_LOG_ERROR, "pcap compile failed: %s.", pcap_geterr(pd));
@@ -4326,16 +4334,24 @@ static void *dumper_thread_worker(void *arg)
 	callback = print_packet;
 	pcap_userdata = (char *)ndo;
 
-	/*
-	* Live capture (if -V was specified, we set RFileName
-	* to a file from the -V file).  Print a message to
-	* the standard error on UN*X.
-	*/
 	dlt = pcap_datalink(pd);
 	dlt_name = pcap_datalink_val_to_name(dlt);
-	(void)fprintf(stderr, "listening on %s", device);
-	(void)fprintf(stderr, ", link-type %u\n", dlt);
+
+    av_log(NULL, AV_LOG_INFO, "listening on %s", device);
+    av_log(NULL, AV_LOG_INFO, ", link-type %u\n", dlt);
 	
+    ltime = time(NULL);
+    strftime(timestr, sizeof(timestr), "%Y_%m_%d_%H_%M_%S", localtime(&ltime)); 
+
+    strncpy(stat_file_name, timestr, strlen(timestr));
+    
+    stat_fp = fopen(stat_file_name, "a");
+	if (stat_fp == NULL) {
+		// Error handling: couldn't open the file
+		fprintf(stderr, "Error opening log file\n");
+		exit(0);
+	}
+
 	pcap_loop(pd, cnt, callback, pcap_userdata);
 	
 	fprintf(stdout, "%u packet%s\n", packets_captured,

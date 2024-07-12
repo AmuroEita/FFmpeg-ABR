@@ -1,1 +1,1 @@
-./ffplay_g -abr -abr-params format=dash ffabr:http://10.120.16.220/manifest.mpd
+./ffplay_g -dst_host 10.120.16.220 -abr -abr-params format=dash ffabr:http://10.120.16.220/manifest.mpd
