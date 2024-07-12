@@ -8,6 +8,8 @@
 --enable-libxml2 \
 --disable-optimizations \
 --disable-asm \
---disable-stripping
+--disable-stripping \
+--enable-libtensorflow \
+--enable-libpcap
 
 make -j96

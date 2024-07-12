@@ -28,6 +28,4 @@ const char *addrtostr6(const void *src, char *dst, size_t size);
 
 const char *addrtostr (const void *src, char *dst, size_t size);
 
-
-
 #endif
