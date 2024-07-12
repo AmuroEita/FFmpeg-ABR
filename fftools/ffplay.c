@@ -36,7 +36,7 @@
 #include <arpa/inet.h>
 #include <netinet/ip.h>
 #include <tensorflow/c/c_api.h>
-#include <pcap/pcap.h>
+#include <pcap.h>
 
 #include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
@@ -129,6 +129,8 @@ const int program_birth_year = 2003;
 #define HTTP_PORT 80
 
 static unsigned sws_flags = SWS_BICUBIC;
+
+extern pcap_t *pcap_open_live(const char *, int, int, int, char *);
 
 typedef struct MyAVPacketList
 {
@@ -4267,6 +4269,8 @@ int validate_ip(char *ip)
         return 0;
     return 1;
 }
+
+// extern void pretty_print_packet(netdissect_options *ndo, const struct pcap_pkthdr *h, const char *sp, int packets_captured);
 
 static void
 print_packet(char *user, const struct pcap_pkthdr *h, const char *sp)

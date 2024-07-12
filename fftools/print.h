@@ -56,14 +56,8 @@ typedef void (*if_printer) IF_PRINTER_ARGS;
 
 #define ND_ASCII_TOUPPER(c)	(((c) >= 'a' && (c) <= 'z') ? (c) - 'a' + 'A' : (c))
 
-void pretty_print_packet(netdissect_options *ndo,
-	 const struct pcap_pkthdr *h, const char *sp,
-     int packets_captured);
-
-void ndo_set_function_pointers(netdissect_options *ndo);
-
 void ascii_print(netdissect_options *, const char *, int);
 
-if_printer get_if_printer(int type);
+void nd_print_protocol_caps(netdissect_options *ndo);
 
 

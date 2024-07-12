@@ -242,3 +242,17 @@ void nd_trunc_longjmp(netdissect_options *);
 
 void nd_pop_packet_info(netdissect_options *ndo);
 
+struct hnamemem *newhnamemem(netdissect_options *ndo);
+
+void ip_print(netdissect_options *ndo, const char *bp, const int length);
+
+void tcp_print(netdissect_options *ndo, const char *bp, int length, const char *bp2, int fragmented);
+
+int ether_print(netdissect_options *ndo, const char *p, int length, int caplen, 
+        void (*print_encap_header)(netdissect_options *ndo, const char *), const char *encap_header_arg);
+
+void pretty_print_packet(netdissect_options *ndo, const struct pcap_pkthdr *h, const char *sp, int packets_captured);
+
+if_printer get_if_printer(int type);
+
+void ndo_set_function_pointers(netdissect_options *ndo);

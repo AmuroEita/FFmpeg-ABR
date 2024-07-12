@@ -50,7 +50,7 @@ static const struct tok ip_frag_values[] = {
     { 0,            NULL }
 };
 
-void
+static void
 ip_demux_print(netdissect_options *ndo,
 	       const char *bp,
 	       int length, int ver, int fragmented, int ttl_hl,
@@ -95,7 +95,7 @@ again:
 /*
  * print an IP datagram.
  */
-static void
+void
 ip_print(netdissect_options *ndo,
 	 const char *bp,
 	 const int length)
@@ -115,7 +115,6 @@ ip_print(netdissect_options *ndo,
 	ip = (const struct ip *)bp;
 
 	if (!ndo->ndo_eflag) {
-		nd_print_protocol_caps(ndo);
 		ND_PRINT(" ");
 	}
 

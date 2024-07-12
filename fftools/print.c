@@ -68,7 +68,7 @@ hex_and_ascii_print_with_offset(netdissect_options *ndo, const char *indent,
 	}
 }
 
-void
+static void
 hex_and_ascii_print(netdissect_options *ndo, const char *indent,
 		    const char *cp, int length)
 {
@@ -102,7 +102,7 @@ ndo_set_function_pointers(netdissect_options *ndo)
 	ndo->ndo_printf=ndo_printf;
 }
 
-const char *
+static const char *
 nd_format_time(char *buf, size_t bufsize, const char *format,
          const struct tm *timeptr)
 {
@@ -182,7 +182,7 @@ ascii_print(netdissect_options *ndo,
 /*
  * Print the timestamp
  */
-void
+static void
 ts_print(netdissect_options *ndo,
          const struct timeval *tv)
 {
@@ -303,7 +303,7 @@ pretty_print_packet(netdissect_options *ndo, const struct pcap_pkthdr *h,
 	nd_free_all(ndo);
 }
 
-if_printer
+static if_printer
 lookup_printer(int type)
 {
 	const struct printer *p;
@@ -321,7 +321,7 @@ void nd_print_protocol_caps(netdissect_options *ndo)
                 ND_PRINT("%c", ND_ASCII_TOUPPER(*p));
 }
 
-void
+static void
 unsupported_if_print(netdissect_options *ndo, const struct pcap_pkthdr *h,
 		     const char *p)
 {

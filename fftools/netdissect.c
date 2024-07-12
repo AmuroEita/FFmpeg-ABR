@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "netdissect.h"
 #include "utils.h"
@@ -110,7 +111,7 @@ newhnamemem(netdissect_options *ndo)
 	return (p);
 }
 
-const char *
+static const char *
 intoa(uint32_t addr)
 {
 	char *cp;

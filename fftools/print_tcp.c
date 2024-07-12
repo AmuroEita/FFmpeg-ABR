@@ -84,7 +84,7 @@ static const struct tok tcp_option_values[] = {
         { 0, NULL }
 };
 
-struct h6namemem *
+static struct h6namemem *
 newh6namemem(netdissect_options *ndo)
 {
 	struct h6namemem *p;
@@ -137,7 +137,7 @@ ip6addr_string(netdissect_options *ndo, const char *ap)
 #define ADDCARRY(x)  {if ((x) > 65535) (x) -= 65535;}
 #define REDUCE {l_util.l = sum; sum = l_util.s[0] + l_util.s[1]; ADDCARRY(sum);}
 
-uint16_t
+static uint16_t
 in_cksum(const struct cksum_vec *vec, int veclen)
 {
 	const uint16_t *w;
@@ -231,7 +231,7 @@ in_cksum(const struct cksum_vec *vec, int veclen)
 	return (~sum & 0xffff);
 }
 
-uint16_t
+static uint16_t
 nextproto6_cksum(netdissect_options *ndo,
                  const struct ip6_hdr *ip6, const uint8_t *data,
 		 int len, int covlen, uint8_t next_proto)
@@ -289,7 +289,7 @@ get_ipv4_to_network_order(netdissect_options *ndo, const char *p)
 
 #define GET_IPV4_TO_NETWORK_ORDER(p) get_ipv4_to_network_order(ndo, (const u_char *)(p))
 
-const char *
+static const char *
 tcpport_string(netdissect_options *ndo, short port)
 {
 	struct hnamemem *tp;
@@ -354,7 +354,7 @@ trunc:
 	return (GET_IPV4_TO_NETWORK_ORDER(ip->ip_dst));
 }
 
-uint16_t
+static uint16_t
 nextproto4_cksum(netdissect_options *ndo,
                  const struct ip *ip, const uint8_t *data,
                  int len, int covlen, uint8_t next_proto)
@@ -395,7 +395,7 @@ tcp_cksum(netdissect_options *ndo,
                                 IPPROTO_TCP);
 }
 
-uint16_t
+static uint16_t
 in_cksum_shouldbe(uint16_t sum, uint16_t computed_sum)
 {
 	uint32_t shouldbe;

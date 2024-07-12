@@ -99,7 +99,7 @@ lookup_emem(netdissect_options *ndo, const char *ep)
 	return tp;
 }
 
-const char *
+static const char *
 mac48_string(netdissect_options *ndo, const uint8_t *ep)
 {
 	int i;
@@ -145,7 +145,7 @@ ether_addresses_print(netdissect_options *ndo, const char *src,
 		 GET_MAC48_STRING(src), GET_MAC48_STRING(dst));
 }
 
-int
+static int
 ethertype_print(netdissect_options *ndo,
 		short ether_type, const char *p,
 		int length, int caplen,
@@ -165,7 +165,6 @@ ethertype_print(netdissect_options *ndo,
 		return (0);
 	}
 }
-
 
 static int
 ether_common_print(netdissect_options *ndo, const char *p, int length,

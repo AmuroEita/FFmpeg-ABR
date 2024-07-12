@@ -43,6 +43,4 @@ struct ip6_hdr {
 
 #define INT16SZ     2   
 
-void ip_print(netdissect_options *ndo, const char *bp, const int length);
-
 #endif
