@@ -68,6 +68,8 @@
 
 #define PCAP_ERRBUF_SIZE 256
 
+#define BUFSIZ 8192
+
 #define PLURAL_SUFFIX(n) \
 	(((n) != 1) ? "s" : "")
 
@@ -358,6 +360,10 @@ typedef struct VideoState
 static const AVInputFormat *file_iformat;
 static const char *input_filename;
 static const char *window_title;
+static const char *window_titles;
+static const char *host;
+static const char *dst_host;
+
 static int default_width = 640;
 static int default_height = 480;
 static int screen_width = 0;
@@ -406,7 +412,6 @@ static int filter_nbthreads = 0;
 
 /* abr */
 static int abr = 0;
-static const char *dst_host;
 
 /* current context */
 
@@ -450,6 +455,8 @@ static const struct TextureFormatEntry
     {AV_PIX_FMT_UYVY422, SDL_PIXELFORMAT_UYVY},
     {AV_PIX_FMT_NONE, SDL_PIXELFORMAT_UNKNOWN},
 };
+
+static int init_dumper_thread();
 
 #if CONFIG_AVFILTER
 static int opt_add_vfilter(void *optctx, const char *opt, const char *arg)
@@ -4143,7 +4150,7 @@ static const OptionDef options[] = {
     {"vn", OPT_BOOL, {&video_disable}, "disable video"},
     {"sn", OPT_BOOL, {&subtitle_disable}, "disable subtitling"},
     {"abr", OPT_BOOL, {&abr}, "enable adaptive bitrate for hls/dash"},
-    {"dst_host", HAS_ARG | OPT_STRING, {&dst_host}, "destination host for dash url"},
+
     {"ast", OPT_STRING | HAS_ARG | OPT_EXPERT, {&wanted_stream_spec[AVMEDIA_TYPE_AUDIO]}, "select desired audio stream", "stream_specifier"},
     {"vst", OPT_STRING | HAS_ARG | OPT_EXPERT, {&wanted_stream_spec[AVMEDIA_TYPE_VIDEO]}, "select desired video stream", "stream_specifier"},
     {"sst", OPT_STRING | HAS_ARG | OPT_EXPERT, {&wanted_stream_spec[AVMEDIA_TYPE_SUBTITLE]}, "select desired subtitle stream", "stream_specifier"},
@@ -4169,7 +4176,11 @@ static const OptionDef options[] = {
     {"loop", OPT_INT | HAS_ARG | OPT_EXPERT, {&loop}, "set number of times the playback shall be looped", "loop count"},
     {"framedrop", OPT_BOOL | OPT_EXPERT, {&framedrop}, "drop frames when cpu is too slow", ""},
     {"infbuf", OPT_BOOL | OPT_EXPERT, {&infinite_buffer}, "don't limit the input buffer size (useful with realtime streams)", ""},
+
     {"window_title", OPT_STRING | HAS_ARG, {&window_title}, "set window title", "window title"},
+    {"host", OPT_STRING | HAS_ARG, {&host}, "set window title", "window title"},
+    {"dst_host", OPT_STRING | HAS_ARG, {&dst_host}, "set destination host", "destination host"},
+
     {"left", OPT_INT | HAS_ARG | OPT_EXPERT, {&screen_left}, "set the x position for the left of the window", "x pos"},
     {"top", OPT_INT | HAS_ARG | OPT_EXPERT, {&screen_top}, "set the y position for the top of the window", "y pos"},
 #if CONFIG_AVFILTER
@@ -4233,45 +4244,6 @@ void show_help_default(const char *opt, const char *arg)
            "left double-click   toggle full screen\n");
 }
 
-int validate_number(char *str)
-{
-    while (*str) {
-        if (!isdigit(*str)) { 
-            return 0;
-        }
-        str++; 
-    }
-    return 1;
-}
-
-int validate_ip(char *ip)
-{ 
-    // check whether the IP is valid or not
-    int i, num, dots = 0;
-    char *ptr;
-    if (ip == NULL)
-        return 0;
-    ptr = strtok(ip, "."); 
-    if (ptr == NULL)
-        return 0;
-    while (ptr) {
-        // check whether the sub string is
-        if (!validate_number(ptr)) 
-            return 0;
-        num = atoi(ptr); 
-        if (num >= 0 && num <= 255) {
-            ptr = strtok(NULL, "."); 
-            if (ptr != NULL)
-                dots++; 
-        }
-        else
-            return 0;
-    }
-    if (dots != 3) 
-        return 0;
-    return 1;
-}
-
 static void
 print_packet(char *user, const struct pcap_pkthdr *h, const char *sp)
 {
@@ -4279,8 +4251,18 @@ print_packet(char *user, const struct pcap_pkthdr *h, const char *sp)
 	pretty_print_packet((netdissect_options *)user, h, sp, packets_captured);
 }
 
+// char* replace_char(char* str, char find, char replace){
+//     char *current_pos = strchr(str,find);
+//     while (current_pos) {
+//         *current_pos = replace;
+//         current_pos = strchr(current_pos, find);
+//     }
+//     return str;
+// }
+
 static void *dumper_thread_worker(void *arg) 
 {
+    pcap_t *pd;
     int cnt, op, i;
 	bpf_u_int32 localnet = 0, netmask = 0;
 	char *cp, *infile, *device;
@@ -4295,9 +4277,9 @@ static void *dumper_thread_worker(void *arg)
 	char *pcap_userdata;
 	char ebuf[PCAP_ERRBUF_SIZE];
 
-    char filter_exp[64] = "tcp port 80 and dst host ";
+    char filter_exp[64] = "tcp dst port 80 and dst host ";
 
-    char stat_file_name[64] = "stat";
+    char stat_file_name[256] = "stat/stat-";
 
 	netdissect_options Ndo;
 	netdissect_options *ndo = &Ndo;
@@ -4315,18 +4297,29 @@ static void *dumper_thread_worker(void *arg)
 	ndo->ndo_snaplen = 0;
 
     device = pcap_lookupdev(ebuf);
-    if (device == NULL) 
-        av_log(NULL, AV_LOG_ERROR, "pcap lookupdev failed: %s.", ebuf);
-
+    if (device == NULL) {
+        av_log(NULL, AV_LOG_FATAL, "pcap lookupdev failed: %s.", ebuf);
+        do_exit(NULL);
+    }
+        
 	pd = pcap_open_live(device, BUFSIZ, 0, -1, ebuf);
+    if  (pd == NULL) {
+        av_log(NULL, AV_LOG_FATAL,"pcap_open_live(): %s\n", ebuf);
+        do_exit(NULL);
+    }
 
-    strncpy(filter_exp, dst_host, strlen(dst_host));
+    strcat(filter_exp, dst_host);
+    av_log(NULL, AV_LOG_INFO, "filter expression: %s\n", filter_exp);
 
-	if (pcap_compile(pd, &fcode, filter_exp, 1, netmask) < 0)
-		av_log(NULL, AV_LOG_ERROR, "pcap compile failed: %s.", pcap_geterr(pd));
-
-	if (pcap_setfilter(pd, &fcode) < 0)
-        av_log(NULL, AV_LOG_ERROR, "pcap setfilter failed: %s.", pcap_geterr(pd));
+	if (pcap_compile(pd, &fcode, filter_exp, 1, netmask) < 0) {
+        av_log(NULL, AV_LOG_FATAL, "pcap compile failed: %s.", pcap_geterr(pd));
+        do_exit(NULL);
+    }
+		
+	if (pcap_setfilter(pd, &fcode) < 0) {
+        av_log(NULL, AV_LOG_FATAL, "pcap setfilter failed: %s.", pcap_geterr(pd));
+        do_exit(NULL);
+    }
 
 	dlt = pcap_datalink(pd);
 	ndo->ndo_if_printer = get_if_printer(dlt);
@@ -4343,14 +4336,15 @@ static void *dumper_thread_worker(void *arg)
     ltime = time(NULL);
     strftime(timestr, sizeof(timestr), "%Y_%m_%d_%H_%M_%S", localtime(&ltime)); 
 
-    strncpy(stat_file_name, timestr, strlen(timestr));
+    strcat(stat_file_name, timestr);
     
     stat_fp = fopen(stat_file_name, "a");
 	if (stat_fp == NULL) {
-		// Error handling: couldn't open the file
-		fprintf(stderr, "Error opening log file\n");
-		exit(0);
+		av_log(NULL, AV_LOG_FATAL, "Open stat file failed\n");
+        do_exit(NULL);
 	}
+
+    av_log(NULL, AV_LOG_INFO, "Stat file %s is in wirting. \n", stat_file_name);
 
 	pcap_loop(pd, cnt, callback, pcap_userdata);
 	
@@ -4370,9 +4364,7 @@ static int init_dumper_thread()
     if (!abr || dst_host == NULL)
         return 0;
 
-    if (!validate_ip(dst_host))
-        return 0;
-
+    av_log(NULL, AV_LOG_INFO, "pcap capture stat is on, target host : %s \n", dst_host);
     if ((ret = pthread_create(&dumper_thread, NULL, dumper_thread_worker, NULL))) {
         av_log(NULL, AV_LOG_ERROR, "pthread_create failed: %s.", strerror(ret));
         return AVERROR(ret);
@@ -4476,6 +4468,8 @@ int main(int argc, char **argv)
         }
     }
 
+    init_dumper_thread();
+
     is = stream_open(input_filename, file_iformat);
     if (!is)
     {
@@ -4485,7 +4479,6 @@ int main(int argc, char **argv)
 
     event_loop(is);
 
-    init_dumper_thread();
     /* never returns */
 
     return 0;
