@@ -41,6 +41,7 @@
 #define TCPOPT_EXPERIMENT2 254 /* experimental headers (rfc4727) */
 
 #define HTTP_PORT 80
+#define HTTPS_PORT 443
 
 struct tcphdr
 {

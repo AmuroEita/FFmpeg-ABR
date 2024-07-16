@@ -1,1 +1,2 @@
-./ffplay_g -dst_host 10.120.16.220 -abr -abr-params format=dash ffabr:http://10.120.16.220/manifest.mpd
+sudo ./ffplay_g -loop 30 -dst_host "10.120.16.220" -init_file "Header.m4s" -stat_remark "nginx" -abr -abr-params format=dash ffabr:http://10.120.16.220/manifest.mpd
+# sudo ./ffplay_g -dst_host "23.56.3.42"  -abr -abr-params format=dash ffabr:http://dash.akamaized.net/dash264/TestCases/1a/qualcomm/1/MultiRate.mpd

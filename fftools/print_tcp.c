@@ -10,8 +10,6 @@
 
 #define ZEROLENOPT(o) ((o) == TCPOPT_EOL || (o) == TCPOPT_NOP)
 
-extern FILE *stat_fp;
-
 int tcp_packets_cnt = 0;
 uint16_t total_win = 0;
 
@@ -1000,21 +998,10 @@ void tcp_print(netdissect_options *ndo,
         }
         bp += header_len;
 
-        if (IS_SRC_OR_DST_PORT(HTTP_PORT))
+        if (IS_SRC_OR_DST_PORT(HTTP_PORT) || IS_SRC_OR_DST_PORT(HTTPS_PORT))
         {
                 ND_PRINT(": ");
-
-                uint16_t ave_win = 0;
-                if (total_win != 0 && tcp_packets_cnt != 0)
-                    ave_win = total_win / (uint16_t)tcp_packets_cnt;
-
-                fprintf(stat_fp, "%u %d\n", ave_win, tcp_packets_cnt);
-                fflush(stat_fp);
-
-                tcp_packets_cnt = 0;
-                total_win = 0;
-
-                // http_print(ndo, bp, length);
+                http_print(ndo, bp, length);
         }
 
         ND_PRINT("\n\n");

@@ -361,8 +361,9 @@ static const AVInputFormat *file_iformat;
 static const char *input_filename;
 static const char *window_title;
 static const char *window_titles;
-static const char *host;
+
 static const char *dst_host;
+static const char *stat_remark;
 
 static int default_width = 640;
 static int default_height = 480;
@@ -428,6 +429,7 @@ static SDL_AudioDeviceID audio_dev;
 pthread_t dumper_thread;
 
 FILE *stat_fp = NULL;
+const char *init_file;
 
 static const struct TextureFormatEntry
 {
@@ -4176,10 +4178,11 @@ static const OptionDef options[] = {
     {"loop", OPT_INT | HAS_ARG | OPT_EXPERT, {&loop}, "set number of times the playback shall be looped", "loop count"},
     {"framedrop", OPT_BOOL | OPT_EXPERT, {&framedrop}, "drop frames when cpu is too slow", ""},
     {"infbuf", OPT_BOOL | OPT_EXPERT, {&infinite_buffer}, "don't limit the input buffer size (useful with realtime streams)", ""},
-
     {"window_title", OPT_STRING | HAS_ARG, {&window_title}, "set window title", "window title"},
-    {"host", OPT_STRING | HAS_ARG, {&host}, "set window title", "window title"},
+
     {"dst_host", OPT_STRING | HAS_ARG, {&dst_host}, "set destination host", "destination host"},
+    {"stat_remark", OPT_STRING | HAS_ARG, {&stat_remark}, "set stat remark", "stat remark"},
+    {"init_file", OPT_STRING | HAS_ARG, {&init_file}, "set initilization file name", "initilization file name"},
 
     {"left", OPT_INT | HAS_ARG | OPT_EXPERT, {&screen_left}, "set the x position for the left of the window", "x pos"},
     {"top", OPT_INT | HAS_ARG | OPT_EXPERT, {&screen_top}, "set the y position for the top of the window", "y pos"},
@@ -4251,15 +4254,6 @@ print_packet(char *user, const struct pcap_pkthdr *h, const char *sp)
 	pretty_print_packet((netdissect_options *)user, h, sp, packets_captured);
 }
 
-// char* replace_char(char* str, char find, char replace){
-//     char *current_pos = strchr(str,find);
-//     while (current_pos) {
-//         *current_pos = replace;
-//         current_pos = strchr(current_pos, find);
-//     }
-//     return str;
-// }
-
 static void *dumper_thread_worker(void *arg) 
 {
     pcap_t *pd;
@@ -4309,7 +4303,7 @@ static void *dumper_thread_worker(void *arg)
     }
 
     strcat(filter_exp, dst_host);
-    av_log(NULL, AV_LOG_INFO, "filter expression: %s\n", filter_exp);
+    av_log(NULL, AV_LOG_INFO, "filter expression: %s \n", filter_exp);
 
 	if (pcap_compile(pd, &fcode, filter_exp, 1, netmask) < 0) {
         av_log(NULL, AV_LOG_FATAL, "pcap compile failed: %s.", pcap_geterr(pd));
@@ -4334,9 +4328,10 @@ static void *dumper_thread_worker(void *arg)
     av_log(NULL, AV_LOG_INFO, ", link-type %u\n", dlt);
 	
     ltime = time(NULL);
-    strftime(timestr, sizeof(timestr), "%Y_%m_%d_%H_%M_%S", localtime(&ltime)); 
+    strftime(timestr, sizeof(timestr), "%Y_%m_%d_%H_%M_%S-", localtime(&ltime)); 
 
     strcat(stat_file_name, timestr);
+    strcat(stat_file_name, stat_remark);
     
     stat_fp = fopen(stat_file_name, "a");
 	if (stat_fp == NULL) {

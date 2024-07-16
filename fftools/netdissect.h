@@ -216,6 +216,13 @@ get_ip6addr_string(netdissect_options *ndo, const char *p)
 
 #define ND_TCHECK_SIZE(p) ND_TCHECK_LEN(p, sizeof(*(p)))
 
+#define ND_TTEST_LEN(p, l) \
+  (IS_NOT_NEGATIVE(l) && \
+	((uintptr_t)ndo->ndo_snapend - (l) <= (uintptr_t)ndo->ndo_snapend && \
+         (uintptr_t)(p) <= (uintptr_t)ndo->ndo_snapend - (l)))
+
+#define ND_TTEST_1(p) ND_TTEST_LEN((p), 1)
+
 #define HASHNAMESIZE 4096
 
 struct hnamemem {
@@ -244,9 +251,11 @@ void nd_pop_packet_info(netdissect_options *ndo);
 
 struct hnamemem *newhnamemem(netdissect_options *ndo);
 
-void ip_print(netdissect_options *ndo, const char *bp, const int length);
+void http_print(netdissect_options *ndo, const char *pptr, int len);
 
 void tcp_print(netdissect_options *ndo, const char *bp, int length, const char *bp2, int fragmented);
+
+void ip_print(netdissect_options *ndo, const char *bp, const int length);
 
 int ether_print(netdissect_options *ndo, const char *p, int length, int caplen, 
         void (*print_encap_header)(netdissect_options *ndo, const char *), const char *encap_header_arg);
