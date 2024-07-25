@@ -6,3 +6,4 @@
 
 
 
+ffmpeg -loglevel 56 -i gozilla.mp4 -map 0 -map 0 -ss 10 -adaptation_sets "id=0,seg_duration=2,frag_duration=1,frag_type=duration,streams=v id=1,seg_duration=2,frag_type=none,streams=a" -f dash manifest.mpd
