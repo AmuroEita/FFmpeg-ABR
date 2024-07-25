@@ -71,7 +71,7 @@
 #define BUFSIZ 8192
 
 #define PLURAL_SUFFIX(n) \
-	(((n) != 1) ? "s" : "")
+    (((n) != 1) ? "s" : "")
 
 static int packets_captured;
 static pcap_t *pd;
@@ -4250,117 +4250,138 @@ void show_help_default(const char *opt, const char *arg)
 static void
 print_packet(char *user, const struct pcap_pkthdr *h, const char *sp)
 {
-	++packets_captured;
-	pretty_print_packet((netdissect_options *)user, h, sp, packets_captured);
+    ++packets_captured;
+    pretty_print_packet((netdissect_options *)user, h, sp, packets_captured);
 }
 
-static void *dumper_thread_worker(void *arg) 
+static bool starts_with(char *a, char *b)
 {
+    if (strncmp(a, b, strlen(b)) == 0)
+        return 1;
+    return 0;
+}
+
+static void *dumper_thread_worker(void *filename)
+{
+    char *url = (char *)filename;
+    // av_log(NULL, AV_LOG_INFO, "filename is : %s \n", url);
+
     pcap_t *pd;
     int cnt, op, i;
-	bpf_u_int32 localnet = 0, netmask = 0;
-	char *cp, *infile, *device;
-	char *endp;
-	pcap_handler callback;
-	int dlt;
-	const char *dlt_name;
-	struct bpf_program fcode;
+    bpf_u_int32 localnet = 0, netmask = 0;
+    char *cp, *infile, *device;
+    char *endp;
+    pcap_handler callback;
+    int dlt;
+    const char *dlt_name;
+    struct bpf_program fcode;
     time_t ltime;
     char timestr[32];
 
-	char *pcap_userdata;
-	char ebuf[PCAP_ERRBUF_SIZE];
+    char *pcap_userdata;
+    char ebuf[PCAP_ERRBUF_SIZE];
 
-    char filter_exp[64] = "tcp dst port 80 and dst host ";
+    char filter_exp[64] = "tcp dst port ";
 
     char stat_file_name[256] = "stat/stat-";
 
-	netdissect_options Ndo;
-	netdissect_options *ndo = &Ndo;
+    if (starts_with(url, "ffabr:https"))
+        strcat(filter_exp, "443 and dst host ");
+    else
+        strcat(filter_exp, "80 and dst host ");
 
-	if (nd_init(ebuf, sizeof(ebuf)) == -1)
-		av_log(NULL, AV_LOG_ERROR, "nd init failed: %s.", ebuf);
+    netdissect_options Ndo;
+    netdissect_options *ndo = &Ndo;
 
-	memset(ndo, 0, sizeof(*ndo));
-	ndo_set_function_pointers(ndo);
+    if (nd_init(ebuf, sizeof(ebuf)) == -1)
+        av_log(NULL, AV_LOG_ERROR, "nd init failed: %s.", ebuf);
 
-	cnt = -1;
-	device = NULL;
-	dlt = -1;
+    memset(ndo, 0, sizeof(*ndo));
+    ndo_set_function_pointers(ndo);
 
-	ndo->ndo_snaplen = 0;
+    cnt = -1;
+    device = NULL;
+    dlt = -1;
+
+    ndo->ndo_snaplen = 0;
 
     device = pcap_lookupdev(ebuf);
-    if (device == NULL) {
+    if (device == NULL)
+    {
         av_log(NULL, AV_LOG_FATAL, "pcap lookupdev failed: %s.", ebuf);
         do_exit(NULL);
     }
-        
-	pd = pcap_open_live(device, BUFSIZ, 0, -1, ebuf);
-    if  (pd == NULL) {
-        av_log(NULL, AV_LOG_FATAL,"pcap_open_live(): %s\n", ebuf);
+
+    pd = pcap_open_live(device, BUFSIZ, 0, -1, ebuf);
+    if (pd == NULL)
+    {
+        av_log(NULL, AV_LOG_FATAL, "pcap_open_live(): %s\n", ebuf);
         do_exit(NULL);
     }
 
     strcat(filter_exp, dst_host);
     av_log(NULL, AV_LOG_INFO, "filter expression: %s \n", filter_exp);
 
-	if (pcap_compile(pd, &fcode, filter_exp, 1, netmask) < 0) {
+    if (pcap_compile(pd, &fcode, filter_exp, 1, netmask) < 0)
+    {
         av_log(NULL, AV_LOG_FATAL, "pcap compile failed: %s.", pcap_geterr(pd));
         do_exit(NULL);
     }
-		
-	if (pcap_setfilter(pd, &fcode) < 0) {
+
+    if (pcap_setfilter(pd, &fcode) < 0)
+    {
         av_log(NULL, AV_LOG_FATAL, "pcap setfilter failed: %s.", pcap_geterr(pd));
         do_exit(NULL);
     }
 
-	dlt = pcap_datalink(pd);
-	ndo->ndo_if_printer = get_if_printer(dlt);
+    dlt = pcap_datalink(pd);
+    ndo->ndo_if_printer = get_if_printer(dlt);
 
-	callback = print_packet;
-	pcap_userdata = (char *)ndo;
+    callback = print_packet;
+    pcap_userdata = (char *)ndo;
 
-	dlt = pcap_datalink(pd);
-	dlt_name = pcap_datalink_val_to_name(dlt);
+    dlt = pcap_datalink(pd);
+    dlt_name = pcap_datalink_val_to_name(dlt);
 
     av_log(NULL, AV_LOG_INFO, "listening on %s", device);
     av_log(NULL, AV_LOG_INFO, ", link-type %u\n", dlt);
-	
+
     ltime = time(NULL);
-    strftime(timestr, sizeof(timestr), "%Y_%m_%d_%H_%M_%S-", localtime(&ltime)); 
+    strftime(timestr, sizeof(timestr), "%Y_%m_%d_%H_%M_%S-", localtime(&ltime));
 
     strcat(stat_file_name, timestr);
     strcat(stat_file_name, stat_remark);
-    
+
     stat_fp = fopen(stat_file_name, "a");
-	if (stat_fp == NULL) {
-		av_log(NULL, AV_LOG_FATAL, "Open stat file failed\n");
+    if (stat_fp == NULL)
+    {
+        av_log(NULL, AV_LOG_FATAL, "Open stat file failed\n");
         do_exit(NULL);
-	}
+    }
 
     av_log(NULL, AV_LOG_INFO, "Stat file %s is in wirting. \n", stat_file_name);
 
-	pcap_loop(pd, cnt, callback, pcap_userdata);
-	
-	fprintf(stdout, "%u packet%s\n", packets_captured,
-		PLURAL_SUFFIX(packets_captured));
+    pcap_loop(pd, cnt, callback, pcap_userdata);
 
-	free(filter_exp);
-	pcap_freecode(&fcode);
+    fprintf(stdout, "%u packet%s\n", packets_captured,
+            PLURAL_SUFFIX(packets_captured));
+
+    free(filter_exp);
+    pcap_freecode(&fcode);
 
     return NULL;
 }
 
-static int init_dumper_thread()
+static int init_dumper_thread(const char *filename)
 {
     int ret = 0;
 
-    if (!abr || dst_host == NULL)
+    if (dst_host == NULL)
         return 0;
 
     av_log(NULL, AV_LOG_INFO, "pcap capture stat is on, target host : %s \n", dst_host);
-    if ((ret = pthread_create(&dumper_thread, NULL, dumper_thread_worker, NULL))) {
+    if ((ret = pthread_create(&dumper_thread, NULL, dumper_thread_worker, (void *)filename)))
+    {
         av_log(NULL, AV_LOG_ERROR, "pthread_create failed: %s.", strerror(ret));
         return AVERROR(ret);
     }
@@ -4463,7 +4484,7 @@ int main(int argc, char **argv)
         }
     }
 
-    init_dumper_thread();
+    init_dumper_thread(input_filename);
 
     is = stream_open(input_filename, file_iformat);
     if (!is)
