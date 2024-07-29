@@ -35,6 +35,10 @@ typedef struct ABRContext {
 
     size_t n_throughputs;
     float *throughputs;
+
+    float bw_estimation;
+
+    char *seg_url;
 } ABRContext;
 
 // Get the average 
@@ -168,6 +172,8 @@ static int abr_open(URLContext *h, const char *uri, int flags, AVDictionary **op
         return AVERROR(EINVAL);
     }
 
+    c->seg_url = nested_url;
+
     // DASH/HLS supported
     en = av_dict_get(c->abr_params, "format", en, AV_DICT_IGNORE_SUFFIX);
     if (en) {
@@ -193,12 +199,15 @@ static int abr_open(URLContext *h, const char *uri, int flags, AVDictionary **op
         av_log(h, AV_LOG_ERROR, "Unable to open resource: %s\n", nested_url);
         return ret;
     }
-    end = av_gettime();
+    end = av_gettime(); 
 
     bw_estimation = harmonic_mean(c->throughputs, c->n_throughputs);
+    c->bw_estimation = bw_estimation;
 
     if (c->can_switch == 1)
         switch_request = abr_throughput_rule(h, bw_estimation);
+
+    av_dict_set(&c->abr_metadata, "seg_url", nested_url, NULL);
 
     av_dict_set_int(&c->abr_metadata, "download_time", (end - start), 0);
     av_dict_set_int(&c->abr_metadata, "switch_request", switch_request, 0);

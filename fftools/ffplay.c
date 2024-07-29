@@ -58,6 +58,8 @@
 #include "libswresample/swresample.h"
 #include "libavutil/thread.h"
 
+// #include "libavutil/dash_data.h"
+
 #if CONFIG_AVFILTER
 #include "libavfilter/avfilter.h"
 #include "libavfilter/buffersink.h"
@@ -133,6 +135,9 @@ const int program_birth_year = 2003;
 static unsigned sws_flags = SWS_BICUBIC;
 
 extern pcap_t *pcap_open_live(const char *, int, int, int, char *);
+
+float throughtout = 0;
+float download_time = 0;
 
 typedef struct MyAVPacketList
 {
@@ -428,7 +433,8 @@ static SDL_AudioDeviceID audio_dev;
 
 pthread_t dumper_thread;
 
-FILE *stat_fp = NULL;
+FILE *net_stat_fp = NULL;
+extern FILE *seg_stat_fp;
 const char *init_file;
 
 static const struct TextureFormatEntry
@@ -3601,6 +3607,26 @@ static VideoState *stream_open(const char *filename,
     is->ytop = 0;
     is->xleft = 0;
 
+    char seg_stat_file_name[256] = "seg_stat/stat-";
+
+    time_t ltime;
+    char timestr[32];
+
+    if (abr) {
+        ltime = time(NULL);
+        strftime(timestr, sizeof(timestr), "%Y_%m_%d_%H_%M_%S-", localtime(&ltime));
+
+        strcat(seg_stat_file_name, timestr);
+        strcat(seg_stat_file_name, stat_remark);
+
+        seg_stat_fp = fopen(seg_stat_file_name, "a");
+        if (seg_stat_fp == NULL)
+        {
+            av_log(NULL, AV_LOG_FATAL, "Open seg stat file failed\n");
+            do_exit(NULL);
+        }
+    }
+
     /* start video display */
     if (frame_queue_init(&is->pictq, &is->videoq, VIDEO_PICTURE_QUEUE_SIZE, 1) < 0)
         goto fail;
@@ -4283,7 +4309,7 @@ static void *dumper_thread_worker(void *filename)
 
     char filter_exp[64] = "tcp dst port ";
 
-    char stat_file_name[256] = "stat/stat-";
+    char net_stat_file_name[256] = "net_stat/stat-";
 
     if (starts_with(url, "ffabr:https"))
         strcat(filter_exp, "443 and dst host ");
@@ -4349,17 +4375,17 @@ static void *dumper_thread_worker(void *filename)
     ltime = time(NULL);
     strftime(timestr, sizeof(timestr), "%Y_%m_%d_%H_%M_%S-", localtime(&ltime));
 
-    strcat(stat_file_name, timestr);
-    strcat(stat_file_name, stat_remark);
+    strcat(net_stat_file_name, timestr);
+    strcat(net_stat_file_name, stat_remark);
 
-    stat_fp = fopen(stat_file_name, "a");
-    if (stat_fp == NULL)
+    net_stat_fp = fopen(net_stat_file_name, "a");
+    if (net_stat_fp == NULL)
     {
         av_log(NULL, AV_LOG_FATAL, "Open stat file failed\n");
         do_exit(NULL);
     }
 
-    av_log(NULL, AV_LOG_INFO, "Stat file %s is in wirting. \n", stat_file_name);
+    av_log(NULL, AV_LOG_INFO, "Stat file %s is in wirting. \n", net_stat_file_name);
 
     pcap_loop(pd, cnt, callback, pcap_userdata);
 
