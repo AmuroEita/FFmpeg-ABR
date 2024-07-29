@@ -42,6 +42,11 @@ Ubuntu 22.0.4
 sh build.sh
 ```
 
+### Before Play
+  ```sh
+  sudo mkdir net_stat && mkdir seg_stat
+  ```
+
 ### Play
 
 ```sh
