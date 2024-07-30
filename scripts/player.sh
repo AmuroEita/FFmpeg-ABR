@@ -1,0 +1,3 @@
+# sudo ./ffplay_g -loop 30 -dst_host "10.120.16.220" -init_file "Header.m4s" -stat_remark "nginx" -abr -abr-params format=dash ffabr:http://10.120.16.220/manifest.mpd
+# sudo ./ffplay_g -loglevel 56 -dst_host "175.178.244.172" -init_file "init.mp4" -stat_remark "gz" -abr -abr-params format=dash ffabr:http://175.178.244.172/godzilla/manifest.mpd
+sudo ./ffplay_g -loop 30 -dst_host "10.120.16.220" -init_file "Header.m4s" -stat_remark "nginx" -abr -abr-params format=dash ffabr:http://10.120.16.220/manifest.mpd
