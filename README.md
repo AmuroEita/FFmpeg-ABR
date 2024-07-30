@@ -36,6 +36,14 @@ Ubuntu 22.0.4
   sudo apt-get install libsdl2-dev
   ```
 
+### Before Compile
+
+* Replace pcap header
+  ```sh
+  sudo cp pcap/bpf.h /usr/include/pcap/bpf.h
+  sudo cp pcap/pcap.h /usr/include/pcap/pcap.h
+  ```
+
 ### Compile
 
 ```sh
